@@ -141,37 +141,29 @@ IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiItemArray, IBindCtx*
         PathRemoveFileSpecW(szModule);
         PathAppendW(szModule, _data.c_str());
 
-        ShellExecuteW(NULL, L"open", szModule, NULL, NULL, SW_SHOWNORMAL);
-    }
-    else if (psiItemArray)
-    {
-        DWORD count = 0;
-        psiItemArray->GetCount(&count);
-        for (DWORD i = 0; i < count; i++)
+        std::wstring params;
+        if (psiItemArray)
         {
-            ComPtr<IShellItem> item;
-            if (SUCCEEDED(psiItemArray->GetItemAt(i, &item)))
+            DWORD count = 0;
+            psiItemArray->GetCount(&count);
+            for (DWORD i = 0; i < count; i++)
             {
-                LPWSTR path = nullptr;
-                if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path)))
+                ComPtr<IShellItem> item;
+                if (SUCCEEDED(psiItemArray->GetItemAt(i, &item)))
                 {
-                    DWORD attrs = GetFileAttributesW(path);
-                    if (attrs != INVALID_FILE_ATTRIBUTES)
+                    LPWSTR path = nullptr;
+                    if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path)))
                     {
-                        if (_action == XToolsAction::MakeHidden)
-                        {
-                            SetFileAttributesW(path, attrs | FILE_ATTRIBUTE_HIDDEN);
-                        }
-                        else if (_action == XToolsAction::MakeSuperHidden)
-                        {
-                            SetFileAttributesW(path, attrs | FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM);
-                        }
-                        SHChangeNotify(SHCNE_UPDATEITEM, SHCNF_PATHW, path, NULL);
+                        params += L"\"";
+                        params += path;
+                        params += L"\" ";
+                        CoTaskMemFree(path);
                     }
-                    CoTaskMemFree(path);
                 }
             }
         }
+
+        ShellExecuteW(NULL, L"open", szModule, params.empty() ? NULL : params.c_str(), NULL, SW_SHOWNORMAL);
     }
     return S_OK;
 }

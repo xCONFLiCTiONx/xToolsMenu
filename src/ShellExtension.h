@@ -71,12 +71,6 @@ public:
         if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Attributes", XToolsAction::OpenExe, L"AttributesDialog.exe")))
             _commands.push_back(cmd);
 
-        if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Make Hidden", XToolsAction::MakeHidden)))
-            _commands.push_back(cmd);
-
-        if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Make Super Hidden", XToolsAction::MakeSuperHidden)))
-            _commands.push_back(cmd);
-
         return S_OK;
     }
     IFACEMETHODIMP Next(ULONG celt, __out_ecount_part(celt, *pceltFetched) IExplorerCommand** apelt, __out_opt ULONG* pceltFetched) override;
