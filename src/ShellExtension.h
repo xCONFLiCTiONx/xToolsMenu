@@ -2,8 +2,7 @@
 
 #include <windows.h>
 #include <shobjidl_core.h>
-#include <wrl/client.h>
-#include <wrl/implements.h>
+#include <wrl.h>
 #include <string>
 #include <vector>
 
@@ -34,7 +33,11 @@ private:
 class XToolsSubCommand : public RuntimeClass<RuntimeClassFlags<ClassicCom>, IExplorerCommand>
 {
 public:
-    XToolsSubCommand(PCWSTR title, PCWSTR exeName) : _title(title), _exeName(exeName) {}
+    HRESULT RuntimeClassInitialize(PCWSTR title, PCWSTR exeName) {
+        _title = title;
+        _exeName = exeName;
+        return S_OK;
+    }
 
     IFACEMETHODIMP GetTitle(_In_opt_ IShellItemArray* psiItemArray, _Outptr_ LPWSTR* ppszName) override;
     IFACEMETHODIMP GetIcon(_In_opt_ IShellItemArray* psiItemArray, _Outptr_ LPWSTR* ppszIcon) override;
@@ -53,7 +56,11 @@ private:
 class XToolsCommandEnumerator : public RuntimeClass<RuntimeClassFlags<ClassicCom>, IEnumExplorerCommand>
 {
 public:
-    XToolsCommandEnumerator();
+    HRESULT RuntimeClassInitialize() {
+        _current = 0;
+        ComPtr<IExplorerCommand> subCommand;
+        return MakeAndInitialize<XToolsSubCommand>(&subCommand, L"Attributes", L"AttributesDialog.exe");
+    }
     IFACEMETHODIMP Next(ULONG celt, __out_ecount_part(celt, *pceltFetched) IExplorerCommand** apelt, __out_opt ULONG* pceltFetched) override;
     IFACEMETHODIMP Skip(ULONG celt) override;
     IFACEMETHODIMP Reset() override;

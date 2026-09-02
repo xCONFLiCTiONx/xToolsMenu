@@ -93,7 +93,7 @@ IFACEMETHODIMP XToolsSubCommand::GetToolTip(IShellItemArray*, LPWSTR* ppszInfoti
 
 IFACEMETHODIMP XToolsSubCommand::GetCanonicalName(GUID* pguidCommandName)
 {
-    *pguidCommandName = GUID_NULL;
+    *pguidCommandName = __uuidof(this);
     return S_OK;
 }
 
@@ -103,14 +103,13 @@ IFACEMETHODIMP XToolsSubCommand::GetState(IShellItemArray*, BOOL, EXPCMDSTATE* p
     return S_OK;
 }
 
-IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray*, IBindCtx*)
+IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiArray, IBindCtx*)
 {
-    WCHAR szModule[MAX_PATH];
-    GetModuleFileNameW(g_hInst, szModule, ARRAYSIZE(szModule));
-    PathRemoveFileSpecW(szModule);
-    PathAppendW(szModule, _exeName.c_str());
-
-    ShellExecuteW(NULL, L"open", szModule, NULL, NULL, SW_SHOWNORMAL);
+    // Handle menu execution based on which subcommand was clicked
+    if (_id == 1) {
+        // Launch AttributesDialog.exe or perform action
+        ShellExecuteW(NULL, L"open", L"AttributesDialog.exe", NULL, NULL, SW_SHOWNORMAL);
+    }
     return S_OK;
 }
 
@@ -120,51 +119,39 @@ IFACEMETHODIMP XToolsSubCommand::GetFlags(EXPCMDFLAGS* pFlags)
     return S_OK;
 }
 
-IFACEMETHODIMP XToolsSubCommand::EnumSubCommands(IEnumExplorerCommand** ppEnum)
-{
-    *ppEnum = nullptr;
-    return E_NOTIMPL;
-}
+// SubCommand Enumerator
+XToolsCommandEnumerator::XToolsCommandEnumerator(const std::vector<ComPtr<IExplorerCommand>>& commands)
+    : _commands(commands), _index(0) {}
 
-// Enumerator implementation
-XToolsCommandEnumerator::XToolsCommandEnumerator() : _current(0)
+IFACEMETHODIMP XToolsCommandEnumerator::Next(ULONG celt, IExplorerCommand** rgelt, ULONG* pceltFetched)
 {
-    ComPtr<IExplorerCommand> subCommand;
-    MakeAndInitialize<XToolsSubCommand>(&subCommand, L"Attributes", L"AttributesDialog.exe");
-    _commands.push_back(subCommand);
-}
-
-IFACEMETHODIMP XToolsCommandEnumerator::Next(ULONG celt, IExplorerCommand** apelt, ULONG* pceltFetched)
-{
+    if (!rgelt) return E_POINTER;
     ULONG fetched = 0;
-    while (_current < _commands.size() && fetched < celt)
+    while (_index < _commands.size() && fetched < celt)
     {
-        _commands[_current].CopyTo(&apelt[fetched]);
-        _current++;
+        _commands[_index].CopyTo(&rgelt[fetched]);
         fetched++;
+        _index++;
     }
-
     if (pceltFetched) *pceltFetched = fetched;
     return fetched == celt ? S_OK : S_FALSE;
 }
 
 IFACEMETHODIMP XToolsCommandEnumerator::Skip(ULONG celt)
 {
-    _current += celt;
-    if (_current > _commands.size()) _current = (ULONG)_commands.size();
+    _index += celt;
     return S_OK;
 }
 
 IFACEMETHODIMP XToolsCommandEnumerator::Reset()
 {
-    _current = 0;
+    _index = 0;
     return S_OK;
 }
 
-IFACEMETHODIMP XToolsCommandEnumerator::Clone(IEnumExplorerCommand** ppenum)
+IFACEMETHODIMP XToolsCommandEnumerator::Clone(IEnumExplorerCommand** ppEnum)
 {
-    *ppenum = nullptr;
-    return E_NOTIMPL;
+    return MakeAndInitialize<XToolsCommandEnumerator>(ppEnum, _commands);
 }
 
 // COM Class Factory
@@ -190,5 +177,5 @@ STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, void** ppv)
 
 STDAPI DllCanUnloadNow()
 {
-    return Module<InProc>::GetModule().GetLockCount() == 0 ? S_OK : S_FALSE;
+    return Module<InProc>::GetModule().GetObjectCount() == 0 ? S_OK : S_FALSE;
 }

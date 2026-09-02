@@ -1,17 +1,34 @@
-$manifestPath = Join-Path $PSScriptRoot "AppxManifest.xml"
-$externalLocation = $PSScriptRoot
-
-Write-Host "Registering xToolsMenu as a Sparse Package..."
-Write-Host "Manifest: $manifestPath"
-Write-Host "External Location: $externalLocation"
-
-# Note: This requires Developer Mode to be enabled in Windows Settings
-Add-AppxPackage -Register $manifestPath -ExternalLocation $externalLocation
-
-if ($?) {
-    Write-Host "Successfully registered! Restarting Explorer..." -ForegroundColor Green
-    Stop-Process -Name explorer -Force
-} else {
-    Write-Host "Failed to register. Make sure you are running as Administrator and Developer Mode is enabled." -ForegroundColor Red
+# Ensure script is run as Administrator
+if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Error "Run this script in an Administrator PowerShell window."
+    exit
 }
-pause
+
+$Root = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$StageDir = Join-Path $Root "AppPackage"
+
+# 1. Create Staging Directory
+if (!(Test-Path $StageDir)) { New-Item -ItemType Directory -Path $StageDir | Out-Null }
+
+# 2. Copy Manifest and Assets to Staging
+Copy-Item (Join-Path $Root "AppxManifest.xml") $StageDir -Force
+if (Test-Path (Join-Path $Root "Assets")) {
+    Copy-Item (Join-Path $Root "Assets") $StageDir -Recurse -Force
+}
+
+# 3. Copy Compiled Binaries from MSBuild output to Staging
+$BuildOut = Join-Path $Root "x64\Release"
+Copy-Item (Join-Path $BuildOut "*.exe") $StageDir -Force
+Copy-Item (Join-Path $BuildOut "*.dll") $StageDir -Force
+
+$ManifestPath = Join-Path $StageDir "AppxManifest.xml"
+
+Write-Host "Unregistering previous version if exists..."
+try { Remove-AppxPackage -Package "xToolsMenu.Extension_1.0.0.0_neutral__1b7q5sa4bwdpa" -ErrorAction SilentlyContinue } catch {}
+
+Write-Host "Registering Sparse Package with External Location pointing to StageDir..."
+Add-AppxPackage -Register -Path $ManifestPath -ExternalLocation $StageDir
+
+Stop-Process -Name explorer -Force
+
+Write-Host "Done! All binaries and manifest staged and registered."
