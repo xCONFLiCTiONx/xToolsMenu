@@ -265,10 +265,37 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
 
     RegisterClassW(&wc);
 
-    HWND hwnd = CreateWindowExW(0, CLASS_NAME, L"xTools Attributes", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
+    // Dynamic Title
+    std::wstring title = L"Attributes";
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (argv && argc > 1) {
+        title += L" - ";
+        title += PathFindFileNameW(argv[1]);
+        LocalFree(argv);
+    }
+
+    HWND hwnd = CreateWindowExW(0, CLASS_NAME, title.c_str(), WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
         CW_USEDEFAULT, CW_USEDEFAULT, 420, 280, NULL, NULL, hInstance, NULL);
 
     if (hwnd == NULL) return 0;
+
+    // Set Window Icon
+    WCHAR szPath[MAX_PATH];
+    GetModuleFileNameW(NULL, szPath, ARRAYSIZE(szPath));
+    while (PathRemoveFileSpecW(szPath)) {
+        WCHAR szIconPath[MAX_PATH];
+        wcscpy_s(szIconPath, szPath);
+        PathAppendW(szIconPath, L"ICON.ico");
+        if (PathFileExistsW(szIconPath)) {
+            HICON hIcon = (HICON)LoadImageW(NULL, szIconPath, IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE);
+            if (hIcon) {
+                SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
+                SendMessage(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
+            }
+            break;
+        }
+    }
 
     BOOL useDarkMode = TRUE;
     DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDarkMode, sizeof(useDarkMode));
