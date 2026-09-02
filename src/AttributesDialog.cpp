@@ -21,9 +21,12 @@ bool GetRegistryValue(const wchar_t* name) {
     DWORD value = 0;
     DWORD size = sizeof(value);
     if (RegGetValueW(HKEY_CURRENT_USER, REG_PATH, name, RRF_RT_REG_DWORD, NULL, &value, &size) == ERROR_SUCCESS) {
-        return value != 0;
+        if (wcscmp(name, L"Hidden") == 0) return (value == 1); // 1 = Show, 2 = Hide
+        return (value == 1); // ShowSuperHidden: 1 = Show, 0 = Hide
     }
-    return false;
+    // Default values if registry keys are missing
+    if (wcscmp(name, L"Hidden") == 0) return false; // Default is Hide (2)
+    return false; // Default is Hide (0)
 }
 
 void SetRegistryValue(const wchar_t* name, bool enabled) {
