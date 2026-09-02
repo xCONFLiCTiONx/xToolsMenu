@@ -270,8 +270,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     int argc;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     if (argv && argc > 1) {
-        title += L" - ";
-        title += PathFindFileNameW(argv[1]);
+        title = PathFindFileNameW(argv[1]);
         LocalFree(argv);
     }
 
