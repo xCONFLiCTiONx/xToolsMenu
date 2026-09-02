@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  xmlns:desktop4="http://schemas.microsoft.com/appx/manifest/desktop/windows10/4"
+  xmlns:desktop5="http://schemas.microsoft.com/appx/manifest/desktop/windows10/5"
+  xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
+  IgnorableNamespaces="uap rescap desktop4 desktop5 com">
+
+  <Identity
+    Name="xToolsMenu.Extension"
+    Publisher="CN=Developer"
+    Version="1.0.0.0" />
+
+  <Properties>
+    <DisplayName>xToolsMenu</DisplayName>
+    <PublisherDisplayName>Developer</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily
+      Name="Windows.Desktop"
+      MinVersion="10.0.19041.0"
+      MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+    <rescap:Capability Name="unvirtualizedResources" />
+  </Capabilities>
+
+  <Applications>
+    <Application
+      Id="xToolsMenu"
+      Executable="Launcher.exe"
+      EntryPoint="Windows.FullTrustApplication">
+
+      <uap:VisualElements
+        DisplayName="xToolsMenu"
+        Description="xToolsMenu Shell Extension"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+
+        <uap:DefaultTile
+          Wide310x150Logo="Assets\Wide310x150Logo.png" />
+      </uap:VisualElements>
+
+      <Extensions>
+        <!-- The Shell Extension registration -->
+        <desktop4:Extension Category="windows.shellExtension">
+          <desktop4:ShellExtension>
+            <desktop5:ItemContextMenus>
+              <desktop5:ItemContextMenu CLSID="{D1B6F6E9-4A9A-4B6A-8A4E-7C2D8D6E5C9A}" />
+            </desktop5:ItemContextMenus>
+          </desktop4:ShellExtension>
+        </desktop4:Extension>
+
+
+
+        <!-- The COM Server registration for the Shell Extension DLL -->
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <com:InProcessServer Path="xToolsMenu.dll">
+              <com:Class
+                Id="D1B6F6E9-4A9A-4B6A-8A4E-7C2D8D6E5C9A"
+                ThreadingModel="Both" />
+            </com:InProcessServer>
+          </com:ComServer>
+        </com:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+</Package>
