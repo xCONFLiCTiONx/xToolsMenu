@@ -45,7 +45,7 @@ foreach ($key in $ShellKeys) {
     if (!(Test-Path $key)) { New-Item -Path $key -Force | Out-Null }
     Set-ItemProperty -Path $key -Name "ExplorerCommandHandler" -Value $Clsid
     Set-ItemProperty -Path $key -Name "MUIVerb" -Value "xToolsMenu"
-    Set-ItemProperty -Path $key -Name "Icon" -Value "imageres.dll,-113"
+    Set-ItemProperty -Path $key -Name "Icon" -Value "imageres.dll,-166"
 }
 
 Write-Host "Unregistering Sparse Package if exists..."

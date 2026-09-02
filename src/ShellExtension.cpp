@@ -43,7 +43,7 @@ IFACEMETHODIMP XToolsMenuCommand::GetIcon(IShellItemArray*, LPWSTR* ppszIcon)
         }
     }
 
-    return SHStrDupW(L"imageres.dll,-113", ppszIcon);
+    return SHStrDupW(L"shell32.dll,-16769", ppszIcon);
 }
 
 IFACEMETHODIMP XToolsMenuCommand::GetToolTip(IShellItemArray*, LPWSTR* ppszInfotip)
@@ -205,8 +205,8 @@ HRESULT XToolsCommandEnumerator::RuntimeClassInitialize()
     _current = 0;
     ComPtr<IExplorerCommand> cmd;
 
-    // Fluent Wrench/Tools icon (imageres.dll,-5305)
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Attributes", XToolsAction::OpenExe, L"imageres.dll,-5305", L"AttributesDialog.exe")))
+    // Use full path to imageres.dll to bypass potential icon cache issues
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Attributes", XToolsAction::OpenExe, L"C:\\Windows\\System32\\imageres.dll,-166", L"AttributesDialog.exe")))
         _commands.push_back(cmd);
 
     return S_OK;
