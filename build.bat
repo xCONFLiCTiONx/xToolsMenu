@@ -40,7 +40,7 @@ if exist "src\Launcher.cpp" (
 )
 
 if exist "src\AttributesDialog.cpp" (
-    cl /nologo /O2 /Fe:x64\Release\AttributesDialog.exe src\AttributesDialog.cpp /link /SUBSYSTEM:WINDOWS user32.lib dwmapi.lib advapi32.lib shell32.lib
+    cl /nologo /O2 /Fe:x64\Release\AttributesDialog.exe src\AttributesDialog.cpp /link /SUBSYSTEM:WINDOWS user32.lib dwmapi.lib advapi32.lib shell32.lib comctl32.lib
 ) else (
     echo Error: src\AttributesDialog.cpp not found!
 )
