@@ -23,6 +23,7 @@ const COLORREF BACKGROUND_COLOR = RGB(32, 32, 32);
 const COLORREF TEXT_COLOR = RGB(240, 240, 240);
 const COLORREF GROUP_TEXT_COLOR = RGB(200, 200, 200);
 HBRUSH g_hbrBackground = nullptr;
+HFONT g_hFont = nullptr;
 
 const wchar_t* REG_PATH = L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced";
 
@@ -182,6 +183,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     case WM_CREATE: {
         HINSTANCE hInst = ((LPCREATESTRUCT)lParam)->hInstance;
 
+        // Create Modern Font (Segoe UI)
+        HDC hdc = GetDC(hwnd);
+        int logHeight = -MulDiv(9, GetDeviceCaps(hdc, LOGPIXELSY), 72);
+        ReleaseDC(hwnd, hdc);
+        g_hFont = CreateFontW(logHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+
         // --- System Attributes ---
         CreateWindowW(L"STATIC", L"System Attributes", WS_VISIBLE | WS_CHILD, 15, 10, 150, 20, hwnd, NULL, hInst, NULL);
         g_hChkShowHidden = CreateWindowW(L"BUTTON", L"Show Hidden Files", WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, 15, 35, 180, 25, hwnd, (HMENU)1, hInst, NULL);
@@ -205,6 +212,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         CreateTimeRow(L"Creation Time:", 140, g_timeCreation, 100);
         CreateTimeRow(L"Last Access:", 170, g_timeAccess, 110);
         CreateTimeRow(L"Last Write:", 200, g_timeWrite, 120);
+
+        // Apply Font to all children
+        EnumChildWindows(hwnd, [](HWND hChild, LPARAM lp) -> BOOL {
+            SendMessage(hChild, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+            return TRUE;
+        }, 0);
 
         // Init Values
         SendMessage(g_hChkShowHidden, BM_SETCHECK, GetRegistryValue(L"Hidden") ? BST_CHECKED : BST_UNCHECKED, 0);
@@ -242,6 +255,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         return 0;
     }
     case WM_DESTROY:
+        if (g_hFont) DeleteObject(g_hFont);
         PostQuitMessage(0);
         return 0;
     }

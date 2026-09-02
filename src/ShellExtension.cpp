@@ -43,7 +43,7 @@ IFACEMETHODIMP XToolsMenuCommand::GetIcon(IShellItemArray*, LPWSTR* ppszIcon)
         }
     }
 
-    return SHStrDupW(L"shell32.dll,-16769", ppszIcon);
+    return SHStrDupW(L"imageres.dll,-113", ppszIcon);
 }
 
 IFACEMETHODIMP XToolsMenuCommand::GetToolTip(IShellItemArray*, LPWSTR* ppszInfotip)
@@ -205,9 +205,8 @@ HRESULT XToolsCommandEnumerator::RuntimeClassInitialize()
     _current = 0;
     ComPtr<IExplorerCommand> cmd;
 
-    // Modern Fluent Wrench icon (shell32.dll,-16817)
-    // Suffixing with ",0" helps force a refresh of the shell icon cache
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Attributes", XToolsAction::OpenExe, L"shell32.dll,-16817,0", L"AttributesDialog.exe")))
+    // Fluent Wrench/Tools icon (imageres.dll,-5305)
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Attributes", XToolsAction::OpenExe, L"imageres.dll,-5305", L"AttributesDialog.exe")))
         _commands.push_back(cmd);
 
     return S_OK;

@@ -5,53 +5,58 @@ cd /d "%~dp0"
 echo ==========================================
 echo Step 1: Building xToolsMenu Solutions...
 echo ==========================================
-
-:: Attempt building via build.bat first WITHOUT touching Explorer
-call :RUN_BUILD
-if %BUILD_SUCCESS%==1 goto :CHECK_PACKAGE
-
-:: If build failed (likely due to DLL lock by Explorer), kill Explorer and retry once
-echo.
-echo [!] Build failed (likely due to file lock). Terminating Explorer and retrying...
-taskkill /f /im explorer.exe >nul 2>&1
-
-call :RUN_BUILD
-if %BUILD_SUCCESS%==0 (
-    echo Build failed even after terminating Explorer!
-    start explorer.exe
+if not exist "build.bat" (
+    echo Error: build.bat not found in directory!
     pause
     exit /b 1
 )
 
-:: Restart Explorer since we had to kill it to clear the lock
-echo Restarting Explorer...
+call build.bat
+if errorlevel 1 (
+    echo [X] Build failed! Exiting.
+    pause
+    exit /b 1
+)
+
+echo.
+echo ==========================================
+echo Step 2: Terminating Explorer (Freeing DLL Locks)
+echo ==========================================
+taskkill /f /im explorer.exe >nul 2>&1
+
+echo.
+echo ==========================================
+echo Step 3: Cleaning old DLL and updating AppPackage...
+echo ==========================================
+if not exist "AppPackage" mkdir "AppPackage"
+
+:: Explicitly delete the old xToolsMenu.dll from AppPackage first
+if exist "AppPackage\xToolsMenu.dll" (
+    del /f /q "AppPackage\xToolsMenu.dll"
+    echo Deleted old AppPackage\xToolsMenu.dll
+)
+
+:: Copy fresh binaries directly into the ExternalLocation AppPackage folder
+xcopy /y /q "x64\Release\*.exe" "AppPackage\" >nul
+xcopy /y /q "x64\Release\*.dll" "AppPackage\" >nul
+echo Fresh binaries successfully copied to AppPackage.
+
+echo.
+echo ==========================================
+echo Step 4: Checking Sparse Package Registration...
+echo ==========================================
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$pkg = Get-AppxPackage -Name xToolsMenu.Extension; if (-not $pkg) { Write-Host 'Package not registered. Running initial registration...'; & '%~dp0register.ps1' } else { Write-Host 'Sparse Package is active. External location is live.' }"
+
+echo.
+echo ==========================================
+echo Step 5: Restarting Explorer...
+echo ==========================================
 start explorer.exe
 
-:CHECK_PACKAGE
 echo.
 echo ==========================================
-echo Step 2: Checking Sparse Package Registration...
+echo All tasks completed successfully!
 echo ==========================================
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$pkg = Get-AppxPackage -Name xToolsMenu.Extension; if (-not $pkg) { Write-Host 'Package not registered. Running initial registration...'; & '%~dp0register.ps1' }"
-
-echo.
-echo Done!
 endlocal
 pause
 exit /b 0
-
-:: --- Build Subroutine ---
-:RUN_BUILD
-set "BUILD_SUCCESS=1"
-
-if not exist "build.bat" (
-    echo Error: build.bat not found in directory!
-    set "BUILD_SUCCESS=0"
-    goto :eof
-)
-
-call build.bat
-if errorlevel 1 set "BUILD_SUCCESS=0"
-goto :eof
-
-pause
