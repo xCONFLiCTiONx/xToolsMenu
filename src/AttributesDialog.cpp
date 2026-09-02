@@ -287,11 +287,10 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
         wcscpy_s(szIconPath, szPath);
         PathAppendW(szIconPath, L"ICON.ico");
         if (PathFileExistsW(szIconPath)) {
-            HICON hIcon = (HICON)LoadImageW(NULL, szIconPath, IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE);
-            if (hIcon) {
-                SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
-                SendMessage(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
-            }
+            HICON hIconBig = (HICON)LoadImageW(NULL, szIconPath, IMAGE_ICON, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), LR_LOADFROMFILE);
+            HICON hIconSmall = (HICON)LoadImageW(NULL, szIconPath, IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_LOADFROMFILE);
+            if (hIconBig) SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIconBig);
+            if (hIconSmall) SendMessage(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIconSmall);
             break;
         }
     }
