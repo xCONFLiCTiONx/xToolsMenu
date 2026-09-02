@@ -27,25 +27,20 @@ IFACEMETHODIMP XToolsMenuCommand::GetTitle(IShellItemArray*, LPWSTR* ppszName)
 
 IFACEMETHODIMP XToolsMenuCommand::GetIcon(IShellItemArray*, LPWSTR* ppszIcon)
 {
-    WCHAR szModule[MAX_PATH];
-    GetModuleFileNameW(g_hInst, szModule, ARRAYSIZE(szModule));
-    PathRemoveFileSpecW(szModule);
+    WCHAR szPath[MAX_PATH];
+    GetModuleFileNameW(g_hInst, szPath, ARRAYSIZE(szPath));
 
-    WCHAR szIconPath[MAX_PATH];
-    wcscpy_s(szIconPath, szModule);
-    PathAppendW(szIconPath, L"ICON.ico");
-
-    if (!PathFileExistsW(szIconPath))
+    // Walk up the directory tree to find ICON.ico in the root
+    while (PathRemoveFileSpecW(szPath))
     {
-        // Try parent directory in case we are in x64/Release
-        PathRemoveFileSpecW(szModule);
-        wcscpy_s(szIconPath, szModule);
+        WCHAR szIconPath[MAX_PATH];
+        wcscpy_s(szIconPath, szPath);
         PathAppendW(szIconPath, L"ICON.ico");
-    }
 
-    if (PathFileExistsW(szIconPath))
-    {
-        return SHStrDupW(szIconPath, ppszIcon);
+        if (PathFileExistsW(szIconPath))
+        {
+            return SHStrDupW(szIconPath, ppszIcon);
+        }
     }
 
     return SHStrDupW(L"shell32.dll,-16769", ppszIcon);
@@ -210,8 +205,8 @@ HRESULT XToolsCommandEnumerator::RuntimeClassInitialize()
     _current = 0;
     ComPtr<IExplorerCommand> cmd;
 
-    // Only "Attributes" with a proper wrench icon
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Attributes", XToolsAction::OpenExe, L"imageres.dll,-5305", L"AttributesDialog.exe")))
+    // Guaranteed Wrench icon in Windows (Modern Fluent style in Win11)
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Attributes", XToolsAction::OpenExe, L"shell32.dll,-255", L"AttributesDialog.exe")))
         _commands.push_back(cmd);
 
     return S_OK;

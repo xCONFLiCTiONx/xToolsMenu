@@ -188,8 +188,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         auto CreateTimeRow = [&](const wchar_t* label, int y, TimePickerPair& pair, int baseId) {
             CreateWindowW(L"STATIC", label, WS_VISIBLE | WS_CHILD, 15, y, 100, 25, hwnd, NULL, hInst, NULL);
-            pair.hDate = CreateWindowW(DATETIMEPICK_CLASSW, L"", WS_VISIBLE | WS_CHILD | DTS_SHORTDATECENTURYFORMAT, 120, y - 3, 160, 25, hwnd, (HMENU)baseId, hInst, NULL);
-            pair.hTime = CreateWindowW(DATETIMEPICK_CLASSW, L"", WS_VISIBLE | WS_CHILD | DTS_TIMEFORMAT, 290, y - 3, 100, 25, hwnd, (HMENU)(baseId + 1), hInst, NULL);
+            pair.hDate = CreateWindowW(DATETIMEPICK_CLASSW, L"", WS_VISIBLE | WS_CHILD | DTS_SHORTDATECENTURYFORMAT, 120, y - 3, 160, 25, hwnd, (HMENU)(UINT_PTR)baseId, hInst, NULL);
+            pair.hTime = CreateWindowW(DATETIMEPICK_CLASSW, L"", WS_VISIBLE | WS_CHILD | DTS_TIMEFORMAT, 290, y - 3, 100, 25, hwnd, (HMENU)(UINT_PTR)(baseId + 1), hInst, NULL);
         };
 
         CreateTimeRow(L"Creation Time:", 140, g_timeCreation, 100);
