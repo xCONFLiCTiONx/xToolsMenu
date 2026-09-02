@@ -36,7 +36,7 @@ IFACEMETHODIMP XToolsMenuCommand::GetToolTip(IShellItemArray*, LPWSTR* ppszInfot
 
 IFACEMETHODIMP XToolsMenuCommand::GetCanonicalName(GUID* pguidCommandName)
 {
-    *pguidCommandName = __uuidof(this);
+    *pguidCommandName = __uuidof(XToolsMenuCommand);
     return S_OK;
 }
 
@@ -93,8 +93,8 @@ IFACEMETHODIMP XToolsSubCommand::GetToolTip(IShellItemArray*, LPWSTR* ppszInfoti
 
 IFACEMETHODIMP XToolsSubCommand::GetCanonicalName(GUID* pguidCommandName)
 {
-    *pguidCommandName = __uuidof(this);
-    return S_OK;
+    *pguidCommandName = GUID_NULL;
+    return E_NOTIMPL;
 }
 
 IFACEMETHODIMP XToolsSubCommand::GetState(IShellItemArray*, BOOL, EXPCMDSTATE* pCmdState)
@@ -103,13 +103,14 @@ IFACEMETHODIMP XToolsSubCommand::GetState(IShellItemArray*, BOOL, EXPCMDSTATE* p
     return S_OK;
 }
 
-IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiArray, IBindCtx*)
+IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray*, IBindCtx*)
 {
-    // Handle menu execution based on which subcommand was clicked
-    if (_id == 1) {
-        // Launch AttributesDialog.exe or perform action
-        ShellExecuteW(NULL, L"open", L"AttributesDialog.exe", NULL, NULL, SW_SHOWNORMAL);
-    }
+    WCHAR szModule[MAX_PATH];
+    GetModuleFileNameW(g_hInst, szModule, ARRAYSIZE(szModule));
+    PathRemoveFileSpecW(szModule);
+    PathAppendW(szModule, _exeName.c_str());
+
+    ShellExecuteW(NULL, L"open", szModule, NULL, NULL, SW_SHOWNORMAL);
     return S_OK;
 }
 
@@ -119,39 +120,42 @@ IFACEMETHODIMP XToolsSubCommand::GetFlags(EXPCMDFLAGS* pFlags)
     return S_OK;
 }
 
-// SubCommand Enumerator
-XToolsCommandEnumerator::XToolsCommandEnumerator(const std::vector<ComPtr<IExplorerCommand>>& commands)
-    : _commands(commands), _index(0) {}
-
-IFACEMETHODIMP XToolsCommandEnumerator::Next(ULONG celt, IExplorerCommand** rgelt, ULONG* pceltFetched)
+IFACEMETHODIMP XToolsSubCommand::EnumSubCommands(IEnumExplorerCommand** ppEnum)
 {
-    if (!rgelt) return E_POINTER;
+    *ppEnum = nullptr;
+    return E_NOTIMPL;
+}
+
+// SubCommand Enumerator implementation
+IFACEMETHODIMP XToolsCommandEnumerator::Next(ULONG celt, IExplorerCommand** apelt, ULONG* pceltFetched)
+{
     ULONG fetched = 0;
-    while (_index < _commands.size() && fetched < celt)
+    while (_current < _commands.size() && fetched < celt)
     {
-        _commands[_index].CopyTo(&rgelt[fetched]);
+        _commands[_current].CopyTo(&apelt[fetched]);
+        _current++;
         fetched++;
-        _index++;
     }
+
     if (pceltFetched) *pceltFetched = fetched;
     return fetched == celt ? S_OK : S_FALSE;
 }
 
 IFACEMETHODIMP XToolsCommandEnumerator::Skip(ULONG celt)
 {
-    _index += celt;
+    _current += celt;
     return S_OK;
 }
 
 IFACEMETHODIMP XToolsCommandEnumerator::Reset()
 {
-    _index = 0;
+    _current = 0;
     return S_OK;
 }
 
-IFACEMETHODIMP XToolsCommandEnumerator::Clone(IEnumExplorerCommand** ppEnum)
+IFACEMETHODIMP XToolsCommandEnumerator::Clone(IEnumExplorerCommand** ppenum)
 {
-    return MakeAndInitialize<XToolsCommandEnumerator>(ppEnum, _commands);
+    return MakeAndInitialize<XToolsCommandEnumerator>(ppenum);
 }
 
 // COM Class Factory
@@ -160,17 +164,32 @@ class XToolsClassFactory : public RuntimeClass<RuntimeClassFlags<ClassicCom>, IC
 public:
     IFACEMETHODIMP CreateInstance(IUnknown* pUnkOuter, REFIID riid, void** ppvObject) override
     {
+        *ppvObject = nullptr;
         if (pUnkOuter) return CLASS_E_NOAGGREGATION;
-        return MakeAndInitialize<XToolsMenuCommand>(ppvObject);
+
+        ComPtr<XToolsMenuCommand> instance;
+        HRESULT hr = MakeAndInitialize<XToolsMenuCommand>(&instance);
+        if (SUCCEEDED(hr))
+        {
+            hr = instance.CopyTo(riid, ppvObject);
+        }
+        return hr;
     }
     IFACEMETHODIMP LockServer(BOOL fLock) override { return S_OK; }
 };
 
 STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, void** ppv)
 {
+    *ppv = nullptr;
     if (rclsid == __uuidof(XToolsMenuCommand))
     {
-        return MakeAndInitialize<XToolsClassFactory>(ppv);
+        ComPtr<XToolsClassFactory> factory;
+        HRESULT hr = MakeAndInitialize<XToolsClassFactory>(&factory);
+        if (SUCCEEDED(hr))
+        {
+            hr = factory.CopyTo(riid, ppv);
+        }
+        return hr;
     }
     return CLASS_E_CLASSNOTAVAILABLE;
 }

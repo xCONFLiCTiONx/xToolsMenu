@@ -17,5 +17,11 @@ call "%VS_PATH%\Common7\Tools\VsDevCmd.bat" -arch=x64
 :: Build solution
 msbuild xToolsMenu.slnx /p:Configuration=Release /p:Platform=x64
 
+:: Build companion exes
+echo Building companion executables...
+cl /nologo /O2 /Fe:x64\Release\Launcher.exe src\Launcher.cpp /link /SUBSYSTEM:WINDOWS user32.lib
+cl /nologo /O2 /Fe:x64\Release\AttributesDialog.exe src\AttributesDialog.cpp /link /SUBSYSTEM:WINDOWS user32.lib dwmapi.lib advapi32.lib shell32.lib
+
 echo Build complete!
+pause
 endlocal

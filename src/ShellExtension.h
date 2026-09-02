@@ -59,7 +59,11 @@ public:
     HRESULT RuntimeClassInitialize() {
         _current = 0;
         ComPtr<IExplorerCommand> subCommand;
-        return MakeAndInitialize<XToolsSubCommand>(&subCommand, L"Attributes", L"AttributesDialog.exe");
+        HRESULT hr = MakeAndInitialize<XToolsSubCommand>(&subCommand, L"Attributes", L"AttributesDialog.exe");
+        if (SUCCEEDED(hr)) {
+            _commands.push_back(subCommand);
+        }
+        return hr;
     }
     IFACEMETHODIMP Next(ULONG celt, __out_ecount_part(celt, *pceltFetched) IExplorerCommand** apelt, __out_opt ULONG* pceltFetched) override;
     IFACEMETHODIMP Skip(ULONG celt) override;

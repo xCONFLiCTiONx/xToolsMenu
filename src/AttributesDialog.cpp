@@ -56,6 +56,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             SetRegistryValue(L"Hidden", hidden);
             SetRegistryValue(L"ShowSuperHidden", system);
 
+            // Notify Explorer to refresh settings
+            SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"ShellState", SMTO_ABORTIFHUNG, 5000, NULL);
             SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, NULL, NULL);
         }
         return 0;
