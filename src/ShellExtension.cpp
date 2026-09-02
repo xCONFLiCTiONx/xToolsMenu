@@ -27,13 +27,33 @@ IFACEMETHODIMP XToolsMenuCommand::GetTitle(IShellItemArray*, LPWSTR* ppszName)
 
 IFACEMETHODIMP XToolsMenuCommand::GetIcon(IShellItemArray*, LPWSTR* ppszIcon)
 {
-    return SHStrDupW(L"shell32.dll,-16769", ppszIcon); // Just an example icon
+    WCHAR szModule[MAX_PATH];
+    GetModuleFileNameW(g_hInst, szModule, ARRAYSIZE(szModule));
+    PathRemoveFileSpecW(szModule);
+
+    WCHAR szIconPath[MAX_PATH];
+    wcscpy_s(szIconPath, szModule);
+    PathAppendW(szIconPath, L"ICON.ico");
+
+    if (!PathFileExistsW(szIconPath))
+    {
+        // Try parent directory in case we are in x64/Release
+        PathRemoveFileSpecW(szModule);
+        wcscpy_s(szIconPath, szModule);
+        PathAppendW(szIconPath, L"ICON.ico");
+    }
+
+    if (PathFileExistsW(szIconPath))
+    {
+        return SHStrDupW(szIconPath, ppszIcon);
+    }
+
+    return SHStrDupW(L"shell32.dll,-16769", ppszIcon);
 }
 
 IFACEMETHODIMP XToolsMenuCommand::GetToolTip(IShellItemArray*, LPWSTR* ppszInfotip)
 {
-    *ppszInfotip = nullptr;
-    return E_NOTIMPL;
+    return SHStrDupW(L"xToolsMenu - Power User Tools", ppszInfotip);
 }
 
 IFACEMETHODIMP XToolsMenuCommand::GetCanonicalName(GUID* pguidCommandName)
@@ -110,8 +130,12 @@ IFACEMETHODIMP XToolsSubCommand::GetTitle(IShellItemArray* psiItemArray, LPWSTR*
 
 IFACEMETHODIMP XToolsSubCommand::GetIcon(IShellItemArray*, LPWSTR* ppszIcon)
 {
-    *ppszIcon = nullptr;
-    return E_NOTIMPL;
+    if (_icon.empty())
+    {
+        *ppszIcon = nullptr;
+        return E_NOTIMPL;
+    }
+    return SHStrDupW(_icon.c_str(), ppszIcon);
 }
 
 IFACEMETHODIMP XToolsSubCommand::GetToolTip(IShellItemArray*, LPWSTR* ppszInfotip)
@@ -181,6 +205,18 @@ IFACEMETHODIMP XToolsSubCommand::EnumSubCommands(IEnumExplorerCommand** ppEnum)
 }
 
 // SubCommand Enumerator implementation
+HRESULT XToolsCommandEnumerator::RuntimeClassInitialize()
+{
+    _current = 0;
+    ComPtr<IExplorerCommand> cmd;
+
+    // Only "Attributes" with a proper wrench icon
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Attributes", XToolsAction::OpenExe, L"imageres.dll,-5305", L"AttributesDialog.exe")))
+        _commands.push_back(cmd);
+
+    return S_OK;
+}
+
 IFACEMETHODIMP XToolsCommandEnumerator::Next(ULONG celt, IExplorerCommand** apelt, ULONG* pceltFetched)
 {
     ULONG fetched = 0;

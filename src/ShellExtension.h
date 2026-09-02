@@ -39,9 +39,10 @@ private:
 class XToolsSubCommand : public RuntimeClass<RuntimeClassFlags<ClassicCom>, IExplorerCommand>
 {
 public:
-    HRESULT RuntimeClassInitialize(PCWSTR title, XToolsAction action, PCWSTR data = nullptr) {
+    HRESULT RuntimeClassInitialize(PCWSTR title, XToolsAction action, PCWSTR icon = nullptr, PCWSTR data = nullptr) {
         _title = title;
         _action = action;
+        _icon = icon ? icon : L"";
         _data = data ? data : L"";
         return S_OK;
     }
@@ -58,21 +59,14 @@ public:
 private:
     std::wstring _title;
     XToolsAction _action;
+    std::wstring _icon;
     std::wstring _data;
 };
 
 class XToolsCommandEnumerator : public RuntimeClass<RuntimeClassFlags<ClassicCom>, IEnumExplorerCommand>
 {
 public:
-    HRESULT RuntimeClassInitialize() {
-        _current = 0;
-        ComPtr<IExplorerCommand> cmd;
-
-        if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Attributes", XToolsAction::OpenExe, L"AttributesDialog.exe")))
-            _commands.push_back(cmd);
-
-        return S_OK;
-    }
+    HRESULT RuntimeClassInitialize();
     IFACEMETHODIMP Next(ULONG celt, __out_ecount_part(celt, *pceltFetched) IExplorerCommand** apelt, __out_opt ULONG* pceltFetched) override;
     IFACEMETHODIMP Skip(ULONG celt) override;
     IFACEMETHODIMP Reset() override;
