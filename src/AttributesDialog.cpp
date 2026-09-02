@@ -16,8 +16,39 @@ const wchar_t* REG_PATH = L"Software\\Microsoft\\Windows\\CurrentVersion\\Explor
 
 HWND g_hChkHidden = nullptr;
 HWND g_hChkSystem = nullptr;
-HWND g_hBtnMakeHidden = nullptr;
-HWND g_hBtnMakeSuper = nullptr;
+HWND g_hChkMakeHidden = nullptr;
+HWND g_hChkMakeSuper = nullptr;
+
+struct SelectionState {
+    bool allHidden = true;
+    bool allSuperHidden = true;
+    bool someHidden = false;
+    bool someSuperHidden = false;
+};
+
+SelectionState GetSelectionState() {
+    SelectionState state;
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (argv && argc > 1) {
+        state.allHidden = true;
+        state.allSuperHidden = true;
+        for (int i = 1; i < argc; i++) {
+            DWORD attrs = GetFileAttributesW(argv[i]);
+            if (attrs != INVALID_FILE_ATTRIBUTES) {
+                bool isHidden = (attrs & FILE_ATTRIBUTE_HIDDEN);
+                bool isSuper = (attrs & FILE_ATTRIBUTE_SYSTEM) && isHidden;
+
+                if (isHidden) state.someHidden = true; else state.allHidden = false;
+                if (isSuper) state.someSuperHidden = true; else state.allSuperHidden = false;
+            }
+        }
+        LocalFree(argv);
+    } else {
+        state.allHidden = state.allSuperHidden = false;
+    }
+    return state;
+}
 
 // We need to store the selection if we want to act on files
 // However, the current AttributesDialog is launched via ShellExecute from the extension.
@@ -62,13 +93,18 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         CreateWindowW(L"BUTTON", L"Selection Actions", WS_VISIBLE | WS_CHILD | BS_GROUPBOX,
             10, 100, 225, 90, hwnd, NULL, NULL, NULL);
 
-        g_hBtnMakeHidden = CreateWindowW(L"BUTTON", L"Make Hidden", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+        g_hChkMakeHidden = CreateWindowW(L"BUTTON", L"Hidden", WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX,
             20, 120, 205, 25, hwnd, (HMENU)3, NULL, NULL);
-        g_hBtnMakeSuper = CreateWindowW(L"BUTTON", L"Make Super Hidden", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+        g_hChkMakeSuper = CreateWindowW(L"BUTTON", L"Super Hidden", WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX,
             20, 155, 205, 25, hwnd, (HMENU)4, NULL, NULL);
 
         SendMessage(g_hChkHidden, BM_SETCHECK, GetRegistryValue(L"Hidden") ? BST_CHECKED : BST_UNCHECKED, 0);
         SendMessage(g_hChkSystem, BM_SETCHECK, GetRegistryValue(L"ShowSuperHidden") ? BST_CHECKED : BST_UNCHECKED, 0);
+
+        SelectionState sel = GetSelectionState();
+        SendMessage(g_hChkMakeHidden, BM_SETCHECK, sel.allHidden ? BST_CHECKED : (sel.someHidden ? BST_INDETERMINATE : BST_UNCHECKED), 0);
+        SendMessage(g_hChkMakeSuper, BM_SETCHECK, sel.allSuperHidden ? BST_CHECKED : (sel.someSuperHidden ? BST_INDETERMINATE : BST_UNCHECKED), 0);
+
         return 0;
     }
     case WM_COMMAND: {
@@ -86,18 +122,22 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, NULL, NULL);
             }
             else if (wmId == 3 || wmId == 4) {
-                // Get paths from command line
+                bool enable = SendMessage((HWND)lParam, BM_GETCHECK, 0, 0) == BST_CHECKED;
+
                 int argc;
                 LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
                 if (argv && argc > 1) {
                     for (int i = 1; i < argc; i++) {
                         DWORD attrs = GetFileAttributesW(argv[i]);
                         if (attrs != INVALID_FILE_ATTRIBUTES) {
-                            if (wmId == 3) {
-                                SetFileAttributesW(argv[i], attrs | FILE_ATTRIBUTE_HIDDEN);
-                            } else {
-                                SetFileAttributesW(argv[i], attrs | FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM);
+                            if (wmId == 3) { // Hidden
+                                if (enable) attrs |= FILE_ATTRIBUTE_HIDDEN;
+                                else attrs &= ~FILE_ATTRIBUTE_HIDDEN;
+                            } else { // Super Hidden (System + Hidden)
+                                if (enable) attrs |= (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM);
+                                else attrs &= ~FILE_ATTRIBUTE_SYSTEM;
                             }
+                            SetFileAttributesW(argv[i], attrs);
                             SHChangeNotify(SHCNE_UPDATEITEM, SHCNF_PATHW, argv[i], NULL);
                         }
                     }
