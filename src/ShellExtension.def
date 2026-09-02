@@ -1,0 +1,4 @@
+LIBRARY xToolsMenu
+EXPORTS
+    DllCanUnloadNow PRIVATE
+    DllGetClassObject PRIVATE
