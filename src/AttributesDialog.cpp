@@ -16,6 +16,13 @@ const wchar_t* REG_PATH = L"Software\\Microsoft\\Windows\\CurrentVersion\\Explor
 
 HWND g_hChkHidden = nullptr;
 HWND g_hChkSystem = nullptr;
+HWND g_hBtnMakeHidden = nullptr;
+HWND g_hBtnMakeSuper = nullptr;
+
+// We need to store the selection if we want to act on files
+// However, the current AttributesDialog is launched via ShellExecute from the extension.
+// The extension currently doesn't pass the file paths to the exe.
+// I should update the extension to pass paths, but first let's add the UI.
 
 bool GetRegistryValue(const wchar_t* name) {
     DWORD value = 0;
@@ -42,26 +49,61 @@ void SetRegistryValue(const wchar_t* name, bool enabled) {
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
     case WM_CREATE: {
+        // Group Box for Explorer Settings
+        CreateWindowW(L"BUTTON", L"Explorer Settings", WS_VISIBLE | WS_CHILD | BS_GROUPBOX,
+            10, 5, 225, 90, hwnd, NULL, NULL, NULL);
+
         g_hChkHidden = CreateWindowW(L"BUTTON", L"Show Hidden Files", WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX,
-            20, 20, 200, 30, hwnd, (HMENU)1, NULL, NULL);
+            20, 25, 200, 25, hwnd, (HMENU)1, NULL, NULL);
         g_hChkSystem = CreateWindowW(L"BUTTON", L"Show System Files", WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX,
-            20, 60, 200, 30, hwnd, (HMENU)2, NULL, NULL);
+            20, 55, 200, 25, hwnd, (HMENU)2, NULL, NULL);
+
+        // Group Box for Selected Item Actions
+        CreateWindowW(L"BUTTON", L"Selection Actions", WS_VISIBLE | WS_CHILD | BS_GROUPBOX,
+            10, 100, 225, 90, hwnd, NULL, NULL, NULL);
+
+        g_hBtnMakeHidden = CreateWindowW(L"BUTTON", L"Make Hidden", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+            20, 120, 205, 25, hwnd, (HMENU)3, NULL, NULL);
+        g_hBtnMakeSuper = CreateWindowW(L"BUTTON", L"Make Super Hidden", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
+            20, 155, 205, 25, hwnd, (HMENU)4, NULL, NULL);
 
         SendMessage(g_hChkHidden, BM_SETCHECK, GetRegistryValue(L"Hidden") ? BST_CHECKED : BST_UNCHECKED, 0);
         SendMessage(g_hChkSystem, BM_SETCHECK, GetRegistryValue(L"ShowSuperHidden") ? BST_CHECKED : BST_UNCHECKED, 0);
         return 0;
     }
     case WM_COMMAND: {
+        int wmId = LOWORD(wParam);
         if (HIWORD(wParam) == BN_CLICKED) {
-            bool hidden = SendMessage(g_hChkHidden, BM_GETCHECK, 0, 0) == BST_CHECKED;
-            bool system = SendMessage(g_hChkSystem, BM_GETCHECK, 0, 0) == BST_CHECKED;
+            if (wmId == 1 || wmId == 2) {
+                bool hidden = SendMessage(g_hChkHidden, BM_GETCHECK, 0, 0) == BST_CHECKED;
+                bool system = SendMessage(g_hChkSystem, BM_GETCHECK, 0, 0) == BST_CHECKED;
 
-            SetRegistryValue(L"Hidden", hidden);
-            SetRegistryValue(L"ShowSuperHidden", system);
+                SetRegistryValue(L"Hidden", hidden);
+                SetRegistryValue(L"ShowSuperHidden", system);
 
-            // Notify Explorer to refresh settings
-            SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"ShellState", SMTO_ABORTIFHUNG, 5000, NULL);
-            SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, NULL, NULL);
+                // Notify Explorer to refresh settings
+                SendMessageTimeoutW(HWND_BROADCAST, WM_SETTINGCHANGE, 0, (LPARAM)L"ShellState", SMTO_ABORTIFHUNG, 5000, NULL);
+                SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, NULL, NULL);
+            }
+            else if (wmId == 3 || wmId == 4) {
+                // Get paths from command line
+                int argc;
+                LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+                if (argv && argc > 1) {
+                    for (int i = 1; i < argc; i++) {
+                        DWORD attrs = GetFileAttributesW(argv[i]);
+                        if (attrs != INVALID_FILE_ATTRIBUTES) {
+                            if (wmId == 3) {
+                                SetFileAttributesW(argv[i], attrs | FILE_ATTRIBUTE_HIDDEN);
+                            } else {
+                                SetFileAttributesW(argv[i], attrs | FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM);
+                            }
+                            SHChangeNotify(SHCNE_UPDATEITEM, SHCNF_PATHW, argv[i], NULL);
+                        }
+                    }
+                    LocalFree(argv);
+                }
+            }
         }
         return 0;
     }
@@ -83,7 +125,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     RegisterClassW(&wc);
 
     HWND hwnd = CreateWindowExW(0, CLASS_NAME, L"xTools Attributes", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
-        CW_USEDEFAULT, CW_USEDEFAULT, 260, 150, NULL, NULL, hInstance, NULL);
+        CW_USEDEFAULT, CW_USEDEFAULT, 260, 240, NULL, NULL, hInstance, NULL);
 
     if (hwnd == NULL) return 0;
 

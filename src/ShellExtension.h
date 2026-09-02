@@ -8,6 +8,12 @@
 
 using namespace Microsoft::WRL;
 
+enum class XToolsAction {
+    OpenExe,
+    MakeHidden,
+    MakeSuperHidden
+};
+
 class __declspec(uuid("D1B6F6E9-4A9A-4B6A-8A4E-7C2D8D6E5C9A"))
 XToolsMenuCommand : public RuntimeClass<RuntimeClassFlags<ClassicCom>, IExplorerCommand, IObjectWithSite>
 {
@@ -33,9 +39,10 @@ private:
 class XToolsSubCommand : public RuntimeClass<RuntimeClassFlags<ClassicCom>, IExplorerCommand>
 {
 public:
-    HRESULT RuntimeClassInitialize(PCWSTR title, PCWSTR exeName) {
+    HRESULT RuntimeClassInitialize(PCWSTR title, XToolsAction action, PCWSTR data = nullptr) {
         _title = title;
-        _exeName = exeName;
+        _action = action;
+        _data = data ? data : L"";
         return S_OK;
     }
 
@@ -50,7 +57,8 @@ public:
 
 private:
     std::wstring _title;
-    std::wstring _exeName;
+    XToolsAction _action;
+    std::wstring _data;
 };
 
 class XToolsCommandEnumerator : public RuntimeClass<RuntimeClassFlags<ClassicCom>, IEnumExplorerCommand>
@@ -58,12 +66,18 @@ class XToolsCommandEnumerator : public RuntimeClass<RuntimeClassFlags<ClassicCom
 public:
     HRESULT RuntimeClassInitialize() {
         _current = 0;
-        ComPtr<IExplorerCommand> subCommand;
-        HRESULT hr = MakeAndInitialize<XToolsSubCommand>(&subCommand, L"Attributes", L"AttributesDialog.exe");
-        if (SUCCEEDED(hr)) {
-            _commands.push_back(subCommand);
-        }
-        return hr;
+        ComPtr<IExplorerCommand> cmd;
+
+        if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Attributes", XToolsAction::OpenExe, L"AttributesDialog.exe")))
+            _commands.push_back(cmd);
+
+        if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Make Hidden", XToolsAction::MakeHidden)))
+            _commands.push_back(cmd);
+
+        if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Make Super Hidden", XToolsAction::MakeSuperHidden)))
+            _commands.push_back(cmd);
+
+        return S_OK;
     }
     IFACEMETHODIMP Next(ULONG celt, __out_ecount_part(celt, *pceltFetched) IExplorerCommand** apelt, __out_opt ULONG* pceltFetched) override;
     IFACEMETHODIMP Skip(ULONG celt) override;

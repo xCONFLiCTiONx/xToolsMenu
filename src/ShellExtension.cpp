@@ -1,8 +1,10 @@
 #include "ShellExtension.h"
 #include <shlwapi.h>
+#include <shlobj.h>
 #include <vector>
 
 #pragma comment(lib, "shlwapi.lib")
+#pragma comment(lib, "shell32.lib")
 
 extern HINSTANCE g_hInst;
 HINSTANCE g_hInst = nullptr;
@@ -74,9 +76,36 @@ IFACEMETHODIMP XToolsMenuCommand::GetSite(REFIID riid, void** ppvSite)
 }
 
 // SubCommand implementation
-IFACEMETHODIMP XToolsSubCommand::GetTitle(IShellItemArray*, LPWSTR* ppszName)
+IFACEMETHODIMP XToolsSubCommand::GetTitle(IShellItemArray* psiItemArray, LPWSTR* ppszName)
 {
-    return SHStrDupW(_title.c_str(), ppszName);
+    std::wstring title = _title;
+
+    if (psiItemArray && (_action == XToolsAction::MakeHidden || _action == XToolsAction::MakeSuperHidden))
+    {
+        DWORD count = 0;
+        psiItemArray->GetCount(&count);
+        if (count == 1)
+        {
+            ComPtr<IShellItem> item;
+            if (SUCCEEDED(psiItemArray->GetItemAt(0, &item)))
+            {
+                LPWSTR name = nullptr;
+                if (SUCCEEDED(item->GetDisplayName(SIGDN_PARENTRELATIVEPARSING, &name)))
+                {
+                    std::wstring type = (_action == XToolsAction::MakeHidden) ? L"Hidden" : L"Super Hidden";
+                    title = L"Make '" + std::wstring(name) + L"' " + type;
+                    CoTaskMemFree(name);
+                }
+            }
+        }
+        else if (count > 1)
+        {
+            std::wstring type = (_action == XToolsAction::MakeHidden) ? L"Hidden" : L"Super Hidden";
+            title = L"Make " + std::to_wstring(count) + L" items " + type;
+        }
+    }
+
+    return SHStrDupW(title.c_str(), ppszName);
 }
 
 IFACEMETHODIMP XToolsSubCommand::GetIcon(IShellItemArray*, LPWSTR* ppszIcon)
@@ -103,14 +132,47 @@ IFACEMETHODIMP XToolsSubCommand::GetState(IShellItemArray*, BOOL, EXPCMDSTATE* p
     return S_OK;
 }
 
-IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray*, IBindCtx*)
+IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiItemArray, IBindCtx*)
 {
-    WCHAR szModule[MAX_PATH];
-    GetModuleFileNameW(g_hInst, szModule, ARRAYSIZE(szModule));
-    PathRemoveFileSpecW(szModule);
-    PathAppendW(szModule, _exeName.c_str());
+    if (_action == XToolsAction::OpenExe)
+    {
+        WCHAR szModule[MAX_PATH];
+        GetModuleFileNameW(g_hInst, szModule, ARRAYSIZE(szModule));
+        PathRemoveFileSpecW(szModule);
+        PathAppendW(szModule, _data.c_str());
 
-    ShellExecuteW(NULL, L"open", szModule, NULL, NULL, SW_SHOWNORMAL);
+        ShellExecuteW(NULL, L"open", szModule, NULL, NULL, SW_SHOWNORMAL);
+    }
+    else if (psiItemArray)
+    {
+        DWORD count = 0;
+        psiItemArray->GetCount(&count);
+        for (DWORD i = 0; i < count; i++)
+        {
+            ComPtr<IShellItem> item;
+            if (SUCCEEDED(psiItemArray->GetItemAt(i, &item)))
+            {
+                LPWSTR path = nullptr;
+                if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path)))
+                {
+                    DWORD attrs = GetFileAttributesW(path);
+                    if (attrs != INVALID_FILE_ATTRIBUTES)
+                    {
+                        if (_action == XToolsAction::MakeHidden)
+                        {
+                            SetFileAttributesW(path, attrs | FILE_ATTRIBUTE_HIDDEN);
+                        }
+                        else if (_action == XToolsAction::MakeSuperHidden)
+                        {
+                            SetFileAttributesW(path, attrs | FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM);
+                        }
+                        SHChangeNotify(SHCNE_UPDATEITEM, SHCNF_PATHW, path, NULL);
+                    }
+                    CoTaskMemFree(path);
+                }
+            }
+        }
+    }
     return S_OK;
 }
 
