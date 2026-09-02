@@ -1,6 +1,7 @@
 #include <windows.h>
 #include <dwmapi.h>
 #include <shlobj.h>
+#include <shlwapi.h>
 #include <commctrl.h>
 #include <string>
 #include <vector>
@@ -9,6 +10,7 @@
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "shell32.lib")
+#pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "gdi32.lib")
 
@@ -101,7 +103,15 @@ void ApplyFileAttributes(int wmId, bool enable) {
                     if (enable) attrs |= FILE_ATTRIBUTE_READONLY; else attrs &= ~FILE_ATTRIBUTE_READONLY;
                 }
                 SetFileAttributesW(argv[i], attrs);
+                SHChangeNotify(SHCNE_ATTRIBUTES, SHCNF_PATHW, argv[i], NULL);
                 SHChangeNotify(SHCNE_UPDATEITEM, SHCNF_PATHW, argv[i], NULL);
+
+                // Also notify parent to refresh visibility
+                WCHAR szParent[MAX_PATH];
+                wcscpy_s(szParent, argv[i]);
+                if (PathRemoveFileSpecW(szParent)) {
+                    SHChangeNotify(SHCNE_UPDATEDIR, SHCNF_PATHW, szParent, NULL);
+                }
             }
         }
         LocalFree(argv);

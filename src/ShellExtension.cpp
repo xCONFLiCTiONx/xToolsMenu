@@ -205,8 +205,9 @@ HRESULT XToolsCommandEnumerator::RuntimeClassInitialize()
     _current = 0;
     ComPtr<IExplorerCommand> cmd;
 
-    // Guaranteed Wrench icon in Windows (Modern Fluent style in Win11)
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Attributes", XToolsAction::OpenExe, L"shell32.dll,-255", L"AttributesDialog.exe")))
+    // Modern Fluent Wrench icon (shell32.dll,-16817)
+    // Suffixing with ",0" helps force a refresh of the shell icon cache
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Attributes", XToolsAction::OpenExe, L"shell32.dll,-16817,0", L"AttributesDialog.exe")))
         _commands.push_back(cmd);
 
     return S_OK;
