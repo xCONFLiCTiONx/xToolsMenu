@@ -12,12 +12,12 @@
 
   <Identity
     Name="xToolsMenu.Extension"
-    Publisher="CN=Developer"
+    Publisher="CN=xCONFLiCTiONx"
     Version="1.0.0.0" />
 
   <Properties>
     <DisplayName>xToolsMenu</DisplayName>
-    <PublisherDisplayName>Developer</PublisherDisplayName>
+    <PublisherDisplayName>xCONFLiCTiONx</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
     <uap10:AllowExternalContent>true</uap10:AllowExternalContent>
     <desktop6:RegistryWriteVirtualization>disabled</desktop6:RegistryWriteVirtualization>
