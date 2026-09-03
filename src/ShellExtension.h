@@ -20,7 +20,8 @@ enum class XToolsAction {
     CopyPath,
     TakeOwnership,
     PasteToFile,
-    Settings
+    Settings,
+    Custom
 };
 
 class __declspec(uuid("D1B6F6E9-4A9A-4B6A-8A4E-7C2D8D6E5C9A"))

@@ -13,12 +13,9 @@ inline void DrawDarkButton(LPDRAWITEMSTRUCT lpDrawItem) {
     RECT rect = lpDrawItem->rcItem;
     UINT state = lpDrawItem->itemState;
 
-    // Determine colors based on state
     HBRUSH hbr;
     if (state & ODS_SELECTED) {
         hbr = CreateSolidBrush(DARK_CONTROL_PUSH);
-    } else if (state & ODS_HOTLIGHT) { // Note: ODS_HOTLIGHT needs TrackMouseEvent, but we can simplify
-        hbr = CreateSolidBrush(DARK_CONTROL_HOVER);
     } else {
         hbr = CreateSolidBrush(DARK_CONTROL_BACK);
     }
@@ -26,7 +23,6 @@ inline void DrawDarkButton(LPDRAWITEMSTRUCT lpDrawItem) {
     FillRect(hdc, &rect, hbr);
     DeleteObject(hbr);
 
-    // Border
     HPEN hPen = CreatePen(PS_SOLID, 1, DARK_BORDER);
     HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
     HBRUSH hOldBrush = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
@@ -35,7 +31,6 @@ inline void DrawDarkButton(LPDRAWITEMSTRUCT lpDrawItem) {
     SelectObject(hdc, hOldPen);
     DeleteObject(hPen);
 
-    // Text
     WCHAR szText[256];
     GetWindowTextW(lpDrawItem->hwndItem, szText, 256);
     HFONT hFont = (HFONT)SendMessage(lpDrawItem->hwndItem, WM_GETFONT, 0, 0);
@@ -47,4 +42,38 @@ inline void DrawDarkButton(LPDRAWITEMSTRUCT lpDrawItem) {
     DrawTextW(hdc, szText, -1, &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
     if (hOldFont) SelectObject(hdc, hOldFont);
+}
+
+inline void DrawDarkTab(HWND hTab, LPDRAWITEMSTRUCT lpDrawItem) {
+    HDC hdc = lpDrawItem->hDC;
+    RECT rect = lpDrawItem->rcItem;
+    int iItem = lpDrawItem->itemID;
+    BOOL bSelected = (iItem == TabCtrl_GetCurSel(hTab));
+
+    HBRUSH hbr = CreateSolidBrush(bSelected ? DARK_CONTROL_BACK : DARK_BACKGROUND);
+    FillRect(hdc, &rect, hbr);
+    DeleteObject(hbr);
+
+    TCITEMW tie;
+    tie.mask = TCIF_TEXT;
+    WCHAR szText[256];
+    tie.pszText = szText;
+    tie.cchTextMax = 256;
+    TabCtrl_GetItem(hTab, iItem, &tie);
+
+    SetTextColor(hdc, DARK_TEXT);
+    SetBkMode(hdc, TRANSPARENT);
+    HFONT hFont = (HFONT)SendMessage(hTab, WM_GETFONT, 0, 0);
+    HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
+    DrawTextW(hdc, szText, -1, &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+    SelectObject(hdc, hOldFont);
+
+    if (!bSelected) {
+        HPEN hPen = CreatePen(PS_SOLID, 1, DARK_BORDER);
+        HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
+        MoveToEx(hdc, rect.left, rect.bottom - 1, NULL);
+        LineTo(hdc, rect.right, rect.bottom - 1);
+        SelectObject(hdc, hOldPen);
+        DeleteObject(hPen);
+    }
 }
