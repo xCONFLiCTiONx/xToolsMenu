@@ -33,13 +33,26 @@ std::vector<EditorInfo> g_editors;
 std::vector<std::wstring> g_filesToOpen;
 
 void AddEditor(const std::wstring& name, const std::wstring& path) {
-    if (path.empty() || !PathFileExistsW(path.c_str())) return;
+    if (path.empty()) return;
 
-    // Deduplicate by path
-    for (const auto& e : g_editors) {
-        if (_wcsicmp(e.path.c_str(), path.c_str()) == 0) return;
+    WCHAR szFull[MAX_PATH];
+    if (GetFullPathNameW(path.c_str(), MAX_PATH, szFull, NULL) == 0) {
+        wcsncpy_s(szFull, path.c_str(), _TRUNCATE);
     }
-    g_editors.push_back({ name, path });
+
+    if (!PathFileExistsW(szFull)) return;
+
+    // Deduplicate by path and name
+    for (const auto& e : g_editors) {
+        if (_wcsicmp(e.path.c_str(), szFull) == 0) return;
+
+        if (_wcsicmp(e.name.c_str(), name.c_str()) == 0) {
+            const wchar_t* f1 = PathFindFileNameW(e.path.c_str());
+            const wchar_t* f2 = PathFindFileNameW(szFull);
+            if (_wcsicmp(f1, f2) == 0) return;
+        }
+    }
+    g_editors.push_back({ name, szFull });
 }
 
 void FindEditors() {
@@ -106,12 +119,15 @@ void FindEditors() {
 }
 
 void OpenWithEditor(int index) {
-    if (index < 0 || index >= g_editors.size()) return;
+    if (index < 0 || index >= (int)g_editors.size()) return;
 
     std::wstring params;
     for (const auto& f : g_filesToOpen) {
         params += L"\"" + f + L"\" ";
     }
+
+    // Allow the launched process to take the foreground
+    AllowSetForegroundWindow(ASFW_ANY);
 
     ShellExecuteW(NULL, L"open", g_editors[index].path.c_str(), params.empty() ? NULL : params.c_str(), NULL, SW_SHOWNORMAL);
 }
