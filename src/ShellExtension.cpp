@@ -1,4 +1,5 @@
 #include "ShellExtension.h"
+#include "resource.h"
 #include <shlwapi.h>
 #include <shlobj.h>
 #include <vector>
@@ -70,8 +71,13 @@ IFACEMETHODIMP XToolsMenuCommand::GetTitle(IShellItemArray*, LPWSTR* ppszName)
 
 IFACEMETHODIMP XToolsMenuCommand::GetIcon(IShellItemArray*, LPWSTR* ppszIcon)
 {
-    if (SUCCEEDED(ResolveRelativeIconPath(L"Icons\\ICON.ico", ppszIcon))) return S_OK;
-    if (SUCCEEDED(ResolveRelativeIconPath(L"ICON.ico", ppszIcon))) return S_OK;
+    WCHAR szModule[MAX_PATH];
+    if (GetModuleFileNameW(g_hInst, szModule, ARRAYSIZE(szModule)))
+    {
+        std::wstring icon = szModule;
+        icon += L",-101";
+        return SHStrDupW(icon.c_str(), ppszIcon);
+    }
     return SHStrDupW(L"shell32.dll,-16769", ppszIcon);
 }
 
@@ -132,6 +138,18 @@ IFACEMETHODIMP XToolsSubCommand::GetIcon(IShellItemArray*, LPWSTR* ppszIcon)
     {
         *ppszIcon = nullptr;
         return E_NOTIMPL;
+    }
+
+    if (!_icon.empty() && _icon[0] == L'#')
+    {
+        WCHAR szModule[MAX_PATH];
+        if (GetModuleFileNameW(g_hInst, szModule, ARRAYSIZE(szModule)))
+        {
+            std::wstring iconRes = szModule;
+            iconRes += L",-";
+            iconRes += _icon.substr(1);
+            return SHStrDupW(iconRes.c_str(), ppszIcon);
+        }
     }
 
     if (SUCCEEDED(ResolveRelativeIconPath(_icon.c_str(), ppszIcon)))
@@ -579,15 +597,15 @@ HRESULT XToolsCommandEnumerator::RuntimeClassInitialize()
 {
     _current = 0;
     ComPtr<IExplorerCommand> cmd;
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Attributes", XToolsAction::OpenExe, L"Icons\\Attributes.svg", L"AttributesDialog.exe"))) _commands.push_back(cmd);
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Terminal", XToolsAction::Terminal, L"Icons\\Terminals.svg"))) _commands.push_back(cmd);
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Terminal (admin)", XToolsAction::TerminalAdmin, L"Icons\\Terminals.svg"))) _commands.push_back(cmd);
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Edit with", XToolsAction::EditWith, L"Icons\\Edit with.svg"))) _commands.push_back(cmd);
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"System Folders", XToolsAction::SystemFolders, L"Icons\\System Folders.svg"))) _commands.push_back(cmd);
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Paste to File", XToolsAction::PasteToFile, L"Icons\\Paste to File.svg"))) _commands.push_back(cmd);
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Copy Name", XToolsAction::CopyName, L"Icons\\Copy Name.svg"))) _commands.push_back(cmd);
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Copy Path", XToolsAction::CopyPath, L"Icons\\Copy Path.svg"))) _commands.push_back(cmd);
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Take Ownership", XToolsAction::TakeOwnership, L"Icons\\Take Ownership.svg"))) _commands.push_back(cmd);
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Attributes", XToolsAction::OpenExe, L"#102", L"AttributesDialog.exe"))) _commands.push_back(cmd);
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Terminal", XToolsAction::Terminal, L"#103"))) _commands.push_back(cmd);
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Terminal (admin)", XToolsAction::TerminalAdmin, L"#103"))) _commands.push_back(cmd);
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Edit with", XToolsAction::EditWith, L"#104"))) _commands.push_back(cmd);
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"System Folders", XToolsAction::SystemFolders, L"#105"))) _commands.push_back(cmd);
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Paste to File", XToolsAction::PasteToFile, L"#106"))) _commands.push_back(cmd);
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Copy Name", XToolsAction::CopyName, L"#107"))) _commands.push_back(cmd);
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Copy Path", XToolsAction::CopyPath, L"#108"))) _commands.push_back(cmd);
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Take Ownership", XToolsAction::TakeOwnership, L"#109"))) _commands.push_back(cmd);
 
     // Load custom commands from registry
     HKEY hKey;
@@ -623,7 +641,7 @@ HRESULT XToolsCommandEnumerator::RuntimeClassInitialize()
         RegCloseKey(hKey);
     }
 
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Settings", XToolsAction::Settings, L"Icons\\Settings.svg"))) _commands.push_back(cmd);
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Settings", XToolsAction::Settings, L"#110"))) _commands.push_back(cmd);
     return S_OK;
 }
 
