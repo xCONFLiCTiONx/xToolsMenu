@@ -1,4 +1,4 @@
-![xToolsMenu Logo](ICON.png)
+<img src="ICON.png" width="150" alt="xToolsMenu Logo">
 
 # xToolsMenu
 
