@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include "resource.h"
+#include "Theme.h"
 
 #pragma comment(lib, "dwmapi.lib")
 #pragma comment(lib, "user32.lib")
@@ -19,10 +20,7 @@
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
 #endif
 
-// Colors for Dark Theme
-const COLORREF BACKGROUND_COLOR = RGB(32, 32, 32);
-const COLORREF TEXT_COLOR = RGB(240, 240, 240);
-const COLORREF GROUP_TEXT_COLOR = RGB(200, 200, 200);
+// Colors for Dark Theme are now in Theme.h
 HBRUSH g_hbrBackground = nullptr;
 HFONT g_hFont = nullptr;
 
@@ -177,8 +175,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     case WM_CTLCOLORDLG:
     case WM_CTLCOLORBTN: {
         HDC hdc = (HDC)wParam;
-        SetTextColor(hdc, TEXT_COLOR);
-        SetBkColor(hdc, BACKGROUND_COLOR);
+        SetTextColor(hdc, DARK_TEXT);
+        SetBkColor(hdc, DARK_BACKGROUND);
         return (LRESULT)g_hbrBackground;
     }
     case WM_CREATE: {
@@ -269,7 +267,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     icex.dwICC = ICC_DATE_CLASSES;
     InitCommonControlsEx(&icex);
 
-    g_hbrBackground = CreateSolidBrush(BACKGROUND_COLOR);
+    g_hbrBackground = CreateSolidBrush(DARK_BACKGROUND);
 
     const wchar_t CLASS_NAME[] = L"AttributesDialogClass";
     WNDCLASSW wc = { 0 };

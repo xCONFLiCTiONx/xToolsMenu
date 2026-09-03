@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include "resource.h"
+#include "Theme.h"
 
 #pragma comment(lib, "dwmapi.lib")
 #pragma comment(lib, "user32.lib")
@@ -16,8 +17,6 @@
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
 #endif
 
-const COLORREF BACKGROUND_COLOR = RGB(32, 32, 32);
-const COLORREF TEXT_COLOR = RGB(240, 240, 240);
 HBRUSH g_hbrBackground = nullptr;
 HFONT g_hFont = nullptr;
 
@@ -59,9 +58,17 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     case WM_CTLCOLORDLG:
     case WM_CTLCOLORBTN: {
         HDC hdc = (HDC)wParam;
-        SetTextColor(hdc, TEXT_COLOR);
-        SetBkColor(hdc, BACKGROUND_COLOR);
+        SetTextColor(hdc, DARK_TEXT);
+        SetBkColor(hdc, DARK_BACKGROUND);
         return (LRESULT)g_hbrBackground;
+    }
+    case WM_DRAWITEM: {
+        LPDRAWITEMSTRUCT lpDrawItem = (LPDRAWITEMSTRUCT)lParam;
+        if (lpDrawItem->CtlType == ODT_BUTTON) {
+            DrawDarkButton(lpDrawItem);
+            return TRUE;
+        }
+        break;
     }
     case WM_CREATE: {
         HINSTANCE hInst = ((LPCREATESTRUCT)lParam)->hInstance;
@@ -73,7 +80,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         int y = 15;
         for (int i = 0; i < g_folders.size(); i++) {
-            HWND hBtn = CreateWindowW(L"BUTTON", g_folders[i].name.c_str(), WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, 20, y, 260, 35, hwnd, (HMENU)(UINT_PTR)i, hInst, NULL);
+            HWND hBtn = CreateWindowW(L"BUTTON", g_folders[i].name.c_str(), WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON | BS_OWNERDRAW, 20, y, 260, 35, hwnd, (HMENU)(UINT_PTR)i, hInst, NULL);
             SendMessage(hBtn, WM_SETFONT, (WPARAM)g_hFont, TRUE);
             y += 45;
         }
@@ -96,7 +103,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 }
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
-    g_hbrBackground = CreateSolidBrush(BACKGROUND_COLOR);
+    g_hbrBackground = CreateSolidBrush(DARK_BACKGROUND);
 
     const wchar_t CLASS_NAME[] = L"SystemFoldersDialogClass";
     WNDCLASSW wc = { 0 };
