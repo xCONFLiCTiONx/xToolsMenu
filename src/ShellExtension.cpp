@@ -438,6 +438,12 @@ IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiItemArray, IBindCtx*
     }
     else if (_action == XToolsAction::TakeOwnership)
     {
+        WCHAR szModule[MAX_PATH];
+        GetModuleFileNameW(g_hInst, szModule, ARRAYSIZE(szModule));
+        PathRemoveFileSpecW(szModule);
+        PathAppendW(szModule, L"TakeOwnership.exe");
+
+        std::wstring params;
         if (psiItemArray)
         {
             DWORD count = 0;
@@ -448,10 +454,17 @@ IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiItemArray, IBindCtx*
                 if (SUCCEEDED(psiItemArray->GetItemAt(i, &item)))
                 {
                     LPWSTR path = nullptr;
-                    if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path))) { TakeOwnershipRecursive(path); CoTaskMemFree(path); }
+                    if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path)))
+                    {
+                        params += L"\"";
+                        params += path;
+                        params += L"\" ";
+                        CoTaskMemFree(path);
+                    }
                 }
             }
         }
+        ShellExecuteW(NULL, L"runas", szModule, params.empty() ? NULL : params.c_str(), NULL, SW_SHOWNORMAL);
     }
     else if (_action == XToolsAction::PasteToFile)
     {
