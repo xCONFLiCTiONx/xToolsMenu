@@ -60,5 +60,4 @@ if exist "src\SystemFoldersDialog.cpp" (
     cl /nologo /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\SystemFoldersDialog.exe src\SystemFoldersDialog.cpp src\app.res /link /SUBSYSTEM:WINDOWS user32.lib dwmapi.lib advapi32.lib shell32.lib comctl32.lib
 )
 
-pause
 endlocal

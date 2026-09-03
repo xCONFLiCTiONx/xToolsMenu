@@ -104,7 +104,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 }
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
-    SetCurrentProcessExplicitAppUserModelID(L"xToolsMenu.App");
     g_hbrBackground = CreateSolidBrush(DARK_BACKGROUND);
 
     const wchar_t CLASS_NAME[] = L"SystemFoldersDialogClass";
