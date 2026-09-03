@@ -340,10 +340,16 @@ IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiItemArray, IBindCtx*
                                 HANDLE hFile = CreateFileW(szDir, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
                                 if (hFile != INVALID_HANDLE_VALUE)
                                 {
-                                    DWORD written;
-                                    WORD bom = 0xFEFF;
-                                    WriteFile(hFile, &bom, 2, &written, NULL);
-                                    WriteFile(hFile, pText, (DWORD)(wcslen(pText) * sizeof(wchar_t)), &written, NULL);
+                                    int utf8Len = WideCharToMultiByte(CP_UTF8, 0, pText, -1, NULL, 0, NULL, NULL);
+                                    if (utf8Len > 0)
+                                    {
+                                        std::vector<char> utf8Text(utf8Len);
+                                        WideCharToMultiByte(CP_UTF8, 0, pText, -1, utf8Text.data(), utf8Len, NULL, NULL);
+
+                                        DWORD written;
+                                        // Write without BOM as is standard for UTF-8
+                                        WriteFile(hFile, utf8Text.data(), (DWORD)(utf8Len - 1), &written, NULL);
+                                    }
                                     CloseHandle(hFile);
                                 }
                                 GlobalUnlock(hData);
