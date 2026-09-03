@@ -6,27 +6,17 @@
 #include <string>
 #include <vector>
 #include <map>
-#include <uxtheme.h>
 #include "resource.h"
 #include "Theme.h"
 
-#pragma comment(lib, "dwmapi.lib")
-#pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "advapi32.lib")
-#pragma comment(lib, "gdi32.lib")
 #pragma comment(lib, "shell32.lib")
+#pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "comdlg32.lib")
-#pragma comment(lib, "uxtheme.lib")
-
-#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
-#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
-#endif
 
 HWND g_hTab = nullptr;
 HFONT g_hFont = nullptr;
-HBRUSH g_hbrBackground = nullptr;
-HBRUSH g_hbrControlBack = nullptr;
 
 const wchar_t* REG_PATH = L"Software\\xToolsMenu\\Settings";
 const wchar_t* REG_CUSTOM = L"Software\\xToolsMenu\\CustomCommands";
@@ -171,46 +161,8 @@ void UpdateTabVisibility() {
     ShowWindow(g_hChkBG, bCustom ? SW_SHOW : SW_HIDE);
 }
 
-LRESULT CALLBACK TabSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
-    if (uMsg == WM_ERASEBKGND) {
-        HDC hdc = (HDC)wParam;
-        RECT rect; GetClientRect(hWnd, &rect);
-        FillRect(hdc, &rect, g_hbrBackground);
-        return 1;
-    }
-    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-}
-
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
-    case WM_CTLCOLORSTATIC: {
-        HDC hdc = (HDC)wParam;
-        SetTextColor(hdc, DARK_TEXT);
-        SetBkMode(hdc, TRANSPARENT);
-        return (LRESULT)g_hbrBackground;
-    }
-    case WM_CTLCOLORDLG:
-    case WM_CTLCOLORBTN:
-        return (LRESULT)g_hbrBackground;
-    case WM_CTLCOLOREDIT:
-    case WM_CTLCOLORLISTBOX: {
-        HDC hdc = (HDC)wParam;
-        SetTextColor(hdc, DARK_TEXT);
-        SetBkColor(hdc, DARK_CONTROL_BACK);
-        return (LRESULT)g_hbrControlBack;
-    }
-    case WM_ERASEBKGND: {
-        HDC hdc = (HDC)wParam;
-        RECT rect; GetClientRect(hwnd, &rect);
-        FillRect(hdc, &rect, g_hbrBackground);
-        return 1;
-    }
-    case WM_DRAWITEM: {
-        LPDRAWITEMSTRUCT lpDrawItem = (LPDRAWITEMSTRUCT)lParam;
-        if (lpDrawItem->hwndItem == g_hTab) { DrawDarkTab(g_hTab, lpDrawItem); return TRUE; }
-        if (lpDrawItem->CtlType == ODT_BUTTON) { DrawDarkButton(lpDrawItem); return TRUE; }
-        break;
-    }
     case WM_CREATE: {
         HINSTANCE hInst = ((LPCREATESTRUCT)lParam)->hInstance;
         HDC hdc = GetDC(hwnd);
@@ -218,8 +170,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         ReleaseDC(hwnd, hdc);
         g_hFont = CreateFontW(logHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
 
-        g_hTab = CreateWindowW(WC_TABCONTROLW, L"", WS_CHILD | WS_VISIBLE | TCS_OWNERDRAWFIXED | WS_CLIPSIBLINGS, 10, 10, 380, 370, hwnd, NULL, hInst, NULL);
-        SetWindowSubclass(g_hTab, TabSubclassProc, 0, 0);
+        g_hTab = CreateWindowW(WC_TABCONTROLW, L"", WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS, 10, 10, 380, 370, hwnd, NULL, hInst, NULL);
         SendMessage(g_hTab, WM_SETFONT, (WPARAM)g_hFont, TRUE);
 
         TCITEMW tie = { TCIF_TEXT };
@@ -250,23 +201,23 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         y += 35;
         g_hStaticPath = CreateWindowW(L"STATIC", L"Path:", WS_CHILD, 25, y, 50, 25, hwnd, NULL, hInst, NULL);
         g_hEditPath = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD, 80, y, 240, 25, hwnd, NULL, hInst, NULL);
-        g_hBtnBrowse = CreateWindowW(L"BUTTON", L"...", WS_CHILD | BS_OWNERDRAW, 325, y, 35, 25, hwnd, (HMENU)102, hInst, NULL);
+        g_hBtnBrowse = CreateWindowW(L"BUTTON", L"...", WS_CHILD, 325, y, 35, 25, hwnd, (HMENU)102, hInst, NULL);
         y += 35;
         g_hStaticArgs = CreateWindowW(L"STATIC", L"Args:", WS_CHILD, 25, y, 50, 25, hwnd, NULL, hInst, NULL);
         g_hEditArgs = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD, 80, y, 280, 25, hwnd, NULL, hInst, NULL);
         y += 35;
         g_hStaticIcon = CreateWindowW(L"STATIC", L"Icon:", WS_CHILD, 25, y, 50, 25, hwnd, NULL, hInst, NULL);
         g_hEditIcon = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD, 80, y, 240, 25, hwnd, NULL, hInst, NULL);
-        g_hBtnBrowseIcon = CreateWindowW(L"BUTTON", L"...", WS_CHILD | BS_OWNERDRAW, 325, y, 35, 25, hwnd, (HMENU)104, hInst, NULL);
+        g_hBtnBrowseIcon = CreateWindowW(L"BUTTON", L"...", WS_CHILD, 325, y, 35, 25, hwnd, (HMENU)104, hInst, NULL);
         y += 35;
         g_hChkFile = CreateWindowW(L"BUTTON", L"File", WS_CHILD | BS_AUTOCHECKBOX, 80, y, 60, 25, hwnd, NULL, hInst, NULL);
         g_hChkDir = CreateWindowW(L"BUTTON", L"Directory", WS_CHILD | BS_AUTOCHECKBOX, 150, y, 90, 25, hwnd, NULL, hInst, NULL);
         g_hChkBG = CreateWindowW(L"BUTTON", L"Background", WS_CHILD | BS_AUTOCHECKBOX, 250, y, 100, 25, hwnd, NULL, hInst, NULL);
 
         y += 50;
-        g_hBtnAdd = CreateWindowW(L"BUTTON", L"Add", WS_CHILD | BS_OWNERDRAW, 40, y, 100, 30, hwnd, (HMENU)100, hInst, NULL);
-        g_hBtnEdit = CreateWindowW(L"BUTTON", L"Edit", WS_CHILD | BS_OWNERDRAW, 150, y, 100, 30, hwnd, (HMENU)103, hInst, NULL);
-        g_hBtnDel = CreateWindowW(L"BUTTON", L"Delete", WS_CHILD | BS_OWNERDRAW, 260, y, 100, 30, hwnd, (HMENU)101, hInst, NULL);
+        g_hBtnAdd = CreateWindowW(L"BUTTON", L"Add", WS_CHILD, 40, y, 100, 30, hwnd, (HMENU)100, hInst, NULL);
+        g_hBtnEdit = CreateWindowW(L"BUTTON", L"Edit", WS_CHILD, 150, y, 100, 30, hwnd, (HMENU)103, hInst, NULL);
+        g_hBtnDel = CreateWindowW(L"BUTTON", L"Delete", WS_CHILD, 260, y, 100, 30, hwnd, (HMENU)101, hInst, NULL);
 
         EnumChildWindows(hwnd, [](HWND hChild, LPARAM lp) -> BOOL {
             SendMessage(hChild, WM_SETFONT, (WPARAM)g_hFont, TRUE);
@@ -358,18 +309,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     SetCurrentProcessExplicitAppUserModelID(L"xToolsMenu.Settings");
     INITCOMMONCONTROLSEX icex = { sizeof(icex), ICC_TAB_CLASSES }; InitCommonControlsEx(&icex);
-    g_hbrBackground = CreateSolidBrush(DARK_BACKGROUND);
-    g_hbrControlBack = CreateSolidBrush(DARK_CONTROL_BACK);
     const wchar_t CLASS_NAME[] = L"SettingsDialogClass";
     HICON hIcon = (HICON)LoadImage(hInstance, MAKEINTRESOURCE(IDI_ICON1), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
-    WNDCLASSEXW wc = { sizeof(WNDCLASSEX), CS_HREDRAW | CS_VREDRAW, WindowProc, 0, 0, hInstance, hIcon, LoadCursor(NULL, IDC_ARROW), g_hbrBackground, NULL, CLASS_NAME, hIcon };
+    WNDCLASSEXW wc = { sizeof(WNDCLASSEX), CS_HREDRAW | CS_VREDRAW, WindowProc, 0, 0, hInstance, hIcon, LoadCursor(NULL, IDC_ARROW), (HBRUSH)(COLOR_BTNFACE + 1), NULL, CLASS_NAME, hIcon };
     RegisterClassExW(&wc);
     HWND hwnd = CreateWindowExW(0, CLASS_NAME, L"xToolsMenu Settings", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, CW_USEDEFAULT, CW_USEDEFAULT, 420, 450, NULL, NULL, hInstance, NULL);
     if (!hwnd) return 0;
-    BOOL useDarkMode = TRUE; DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDarkMode, sizeof(useDarkMode));
     RECT rect; GetWindowRect(hwnd, &rect);
     SetWindowPos(hwnd, NULL, (GetSystemMetrics(SM_CXSCREEN) - (rect.right - rect.left)) / 2, (GetSystemMetrics(SM_CYSCREEN) - (rect.bottom - rect.top)) / 2, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
     ShowWindow(hwnd, nCmdShow);
     MSG msg; while (GetMessage(&msg, NULL, 0, 0)) { TranslateMessage(&msg); DispatchMessage(&msg); }
-    DeleteObject(g_hbrBackground); DeleteObject(g_hbrControlBack); return 0;
+    return 0;
 }

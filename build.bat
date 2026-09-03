@@ -47,21 +47,21 @@ if exist "src\Launcher.cpp" (
 )
 
 if exist "src\AttributesDialog.cpp" (
-    cl /nologo /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\AttributesDialog.exe src\AttributesDialog.cpp src\app.res /link /SUBSYSTEM:WINDOWS user32.lib dwmapi.lib advapi32.lib shell32.lib comctl32.lib
+    cl /nologo /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\AttributesDialog.exe src\AttributesDialog.cpp src\app.res /link /SUBSYSTEM:WINDOWS user32.lib advapi32.lib shell32.lib comctl32.lib gdi32.lib
 ) else (
     echo Error: src\AttributesDialog.cpp not found!
 )
 
 if exist "src\EditWithDialog.cpp" (
-    cl /nologo /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\EditWithDialog.exe src\EditWithDialog.cpp src\app.res /link /SUBSYSTEM:WINDOWS user32.lib dwmapi.lib advapi32.lib shell32.lib comctl32.lib comdlg32.lib
+    cl /nologo /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\EditWithDialog.exe src\EditWithDialog.cpp src\app.res /link /SUBSYSTEM:WINDOWS user32.lib advapi32.lib shell32.lib comctl32.lib comdlg32.lib gdi32.lib
 )
 
 if exist "src\SystemFoldersDialog.cpp" (
-    cl /nologo /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\SystemFoldersDialog.exe src\SystemFoldersDialog.cpp src\app.res /link /SUBSYSTEM:WINDOWS user32.lib dwmapi.lib advapi32.lib shell32.lib comctl32.lib
+    cl /nologo /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\SystemFoldersDialog.exe src\SystemFoldersDialog.cpp src\app.res /link /SUBSYSTEM:WINDOWS user32.lib advapi32.lib shell32.lib comctl32.lib gdi32.lib
 )
 
 if exist "src\SettingsDialog.cpp" (
-    cl /nologo /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\Settings.exe src\SettingsDialog.cpp src\app.res /link /SUBSYSTEM:WINDOWS user32.lib dwmapi.lib advapi32.lib shell32.lib comctl32.lib comdlg32.lib
+    cl /nologo /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\Settings.exe src\SettingsDialog.cpp src\app.res /link /SUBSYSTEM:WINDOWS user32.lib advapi32.lib shell32.lib comctl32.lib comdlg32.lib gdi32.lib
 )
 
 endlocal

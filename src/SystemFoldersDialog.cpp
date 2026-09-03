@@ -1,24 +1,16 @@
 #include <windows.h>
-#include <dwmapi.h>
 #include <shlobj.h>
 #include <shlwapi.h>
 #include <shobjidl.h>
 #include <string>
 #include <vector>
 #include "resource.h"
-#include "Theme.h"
 
-#pragma comment(lib, "dwmapi.lib")
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "shell32.lib")
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "gdi32.lib")
 
-#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
-#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
-#endif
-
-HBRUSH g_hbrBackground = nullptr;
 HFONT g_hFont = nullptr;
 
 struct FolderInfo {
@@ -55,22 +47,6 @@ void OpenFolder(int index) {
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
-    case WM_CTLCOLORSTATIC:
-    case WM_CTLCOLORDLG:
-    case WM_CTLCOLORBTN: {
-        HDC hdc = (HDC)wParam;
-        SetTextColor(hdc, DARK_TEXT);
-        SetBkColor(hdc, DARK_BACKGROUND);
-        return (LRESULT)g_hbrBackground;
-    }
-    case WM_DRAWITEM: {
-        LPDRAWITEMSTRUCT lpDrawItem = (LPDRAWITEMSTRUCT)lParam;
-        if (lpDrawItem->CtlType == ODT_BUTTON) {
-            DrawDarkButton(lpDrawItem);
-            return TRUE;
-        }
-        break;
-    }
     case WM_CREATE: {
         HINSTANCE hInst = ((LPCREATESTRUCT)lParam)->hInstance;
 
@@ -81,7 +57,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         int y = 15;
         for (int i = 0; i < g_folders.size(); i++) {
-            HWND hBtn = CreateWindowW(L"BUTTON", g_folders[i].name.c_str(), WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON | BS_OWNERDRAW, 20, y, 260, 35, hwnd, (HMENU)(UINT_PTR)i, hInst, NULL);
+            HWND hBtn = CreateWindowW(L"BUTTON", g_folders[i].name.c_str(), WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, 20, y, 260, 35, hwnd, (HMENU)(UINT_PTR)i, hInst, NULL);
             SendMessage(hBtn, WM_SETFONT, (WPARAM)g_hFont, TRUE);
             y += 45;
         }
@@ -107,8 +83,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     // MANDATORY: Must be the absolute first line to override Shell identity
     SetCurrentProcessExplicitAppUserModelID(L"xToolsMenu.App");
 
-    g_hbrBackground = CreateSolidBrush(DARK_BACKGROUND);
-
     const wchar_t CLASS_NAME[] = L"SystemFoldersDialogClass";
     HICON hIcon = (HICON)LoadImage(hInstance, MAKEINTRESOURCE(IDI_ICON1), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
 
@@ -117,7 +91,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = hInstance;
     wc.lpszClassName = CLASS_NAME;
-    wc.hbrBackground = g_hbrBackground;
+    wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
     wc.hIcon = hIcon;
     wc.hIconSm = hIcon;
 
@@ -132,9 +106,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
     SendMessage(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
 
-    BOOL useDarkMode = TRUE;
-    DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDarkMode, sizeof(useDarkMode));
-
     RECT rect;
     GetWindowRect(hwnd, &rect);
     SetWindowPos(hwnd, NULL, (GetSystemMetrics(SM_CXSCREEN) - (rect.right - rect.left)) / 2, (GetSystemMetrics(SM_CYSCREEN) - (rect.bottom - rect.top)) / 2, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
@@ -147,6 +118,5 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
         DispatchMessage(&msg);
     }
 
-    DeleteObject(g_hbrBackground);
     return 0;
 }
