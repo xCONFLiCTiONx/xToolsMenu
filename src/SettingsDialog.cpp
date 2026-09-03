@@ -68,6 +68,7 @@ HWND g_hListCustom = nullptr;
 HWND g_hEditName = nullptr, g_hEditPath = nullptr, g_hEditArgs = nullptr;
 HWND g_hBtnAdd = nullptr, g_hBtnDel = nullptr, g_hBtnBrowse = nullptr;
 HWND g_hStaticName = nullptr, g_hStaticPath = nullptr, g_hStaticArgs = nullptr;
+HWND g_hChkFile = nullptr, g_hChkDir = nullptr, g_hChkBG = nullptr;
 
 bool GetSetting(const wchar_t* name) {
     DWORD value = 1, size = sizeof(value);
@@ -128,6 +129,9 @@ void UpdateTabVisibility() {
     ShowWindow(g_hStaticName, bCustom ? SW_SHOW : SW_HIDE);
     ShowWindow(g_hStaticPath, bCustom ? SW_SHOW : SW_HIDE);
     ShowWindow(g_hStaticArgs, bCustom ? SW_SHOW : SW_HIDE);
+    ShowWindow(g_hChkFile, bCustom ? SW_SHOW : SW_HIDE);
+    ShowWindow(g_hChkDir, bCustom ? SW_SHOW : SW_HIDE);
+    ShowWindow(g_hChkBG, bCustom ? SW_SHOW : SW_HIDE);
 }
 
 // Subclass for the Tab Control to paint background
@@ -140,15 +144,12 @@ LRESULT CALLBACK TabSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
         return 1;
     }
     if (uMsg == WM_PAINT) {
-        // Paint the background manually to avoid white flicker/area
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hWnd, &ps);
         RECT rect;
         GetClientRect(hWnd, &rect);
         FillRect(hdc, &rect, g_hbrBackground);
         EndPaint(hWnd, &ps);
-
-        // Let the original proc draw the tabs (which are owner-drawn anyway)
         return DefSubclassProc(hWnd, uMsg, wParam, lParam);
     }
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
@@ -196,7 +197,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         ReleaseDC(hwnd, hdc);
         g_hFont = CreateFontW(logHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
 
-        g_hTab = CreateWindowW(WC_TABCONTROLW, L"", WS_CHILD | WS_VISIBLE | TCS_OWNERDRAWFIXED | WS_CLIPSIBLINGS, 10, 10, 380, 520, hwnd, NULL, hInst, NULL);
+        g_hTab = CreateWindowW(WC_TABCONTROLW, L"", WS_CHILD | WS_VISIBLE | TCS_OWNERDRAWFIXED | WS_CLIPSIBLINGS, 10, 10, 380, 560, hwnd, NULL, hInst, NULL);
         SetWindowSubclass(g_hTab, TabSubclassProc, 0, 0);
         SendMessage(g_hTab, WM_SETFONT, (WPARAM)g_hFont, TRUE);
 
@@ -226,7 +227,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         ListView_SetTextBkColor(g_hListCustom, DARK_CONTROL_BACK);
         ListView_SetTextColor(g_hListCustom, DARK_TEXT);
 
-        // Theme the ListView Header
         HWND hHeader = ListView_GetHeader(g_hListCustom);
         SetWindowTheme(hHeader, L"", L"");
 
@@ -245,6 +245,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         y += 35;
         g_hStaticArgs = CreateWindowW(L"STATIC", L"Args:", WS_CHILD, 20, y, 50, 25, g_hTab, NULL, hInst, NULL);
         g_hEditArgs = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD, 70, y, 280, 25, g_hTab, NULL, hInst, NULL);
+
+        y += 35;
+        g_hChkFile = CreateWindowW(L"BUTTON", L"File", WS_CHILD | BS_AUTOCHECKBOX, 70, y, 60, 25, g_hTab, NULL, hInst, NULL);
+        g_hChkDir = CreateWindowW(L"BUTTON", L"Directory", WS_CHILD | BS_AUTOCHECKBOX, 140, y, 90, 25, g_hTab, NULL, hInst, NULL);
+        g_hChkBG = CreateWindowW(L"BUTTON", L"Directory Background", WS_CHILD | BS_AUTOCHECKBOX, 240, y, 140, 25, g_hTab, NULL, hInst, NULL);
+        SendMessage(g_hChkFile, BM_SETCHECK, BST_CHECKED, 0);
+        SendMessage(g_hChkDir, BM_SETCHECK, BST_CHECKED, 0);
+        SendMessage(g_hChkBG, BM_SETCHECK, BST_CHECKED, 0);
+
         y += 45;
         g_hBtnAdd = CreateWindowW(L"BUTTON", L"Add", WS_CHILD | BS_OWNERDRAW, 70, y, 100, 30, g_hTab, (HMENU)100, hInst, NULL);
         g_hBtnDel = CreateWindowW(L"BUTTON", L"Delete", WS_CHILD | BS_OWNERDRAW, 180, y, 100, 30, g_hTab, (HMENU)101, hInst, NULL);
@@ -265,6 +274,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 GetWindowTextW(g_hEditName, name, 256);
                 GetWindowTextW(g_hEditPath, path, MAX_PATH);
                 GetWindowTextW(g_hEditArgs, args, MAX_PATH);
+                DWORD showFile = (SendMessage(g_hChkFile, BM_GETCHECK, 0, 0) == BST_CHECKED);
+                DWORD showDir = (SendMessage(g_hChkDir, BM_GETCHECK, 0, 0) == BST_CHECKED);
+                DWORD showBG = (SendMessage(g_hChkBG, BM_GETCHECK, 0, 0) == BST_CHECKED);
+
                 if (wcslen(name) > 0 && wcslen(path) > 0) {
                     HKEY hKey;
                     if (RegCreateKeyExW(HKEY_CURRENT_USER, REG_CUSTOM, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS) {
@@ -272,6 +285,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                         if (RegCreateKeyExW(hKey, name, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, NULL, &hSubKey, NULL) == ERROR_SUCCESS) {
                             RegSetValueExW(hSubKey, L"Path", 0, REG_SZ, (BYTE*)path, (DWORD)(wcslen(path) + 1) * sizeof(wchar_t));
                             RegSetValueExW(hSubKey, L"Args", 0, REG_SZ, (BYTE*)args, (DWORD)(wcslen(args) + 1) * sizeof(wchar_t));
+                            RegSetValueExW(hSubKey, L"ShowFile", 0, REG_DWORD, (BYTE*)&showFile, sizeof(DWORD));
+                            RegSetValueExW(hSubKey, L"ShowDir", 0, REG_DWORD, (BYTE*)&showDir, sizeof(DWORD));
+                            RegSetValueExW(hSubKey, L"ShowBG", 0, REG_DWORD, (BYTE*)&showBG, sizeof(DWORD));
                             RegCloseKey(hSubKey);
                         }
                         RegCloseKey(hKey);
@@ -343,7 +359,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     HICON hIcon = (HICON)LoadImage(hInstance, MAKEINTRESOURCE(IDI_ICON1), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
     WNDCLASSEXW wc = { sizeof(WNDCLASSEX), CS_HREDRAW | CS_VREDRAW, WindowProc, 0, 0, hInstance, hIcon, LoadCursor(NULL, IDC_ARROW), g_hbrBackground, NULL, CLASS_NAME, hIcon };
     RegisterClassExW(&wc);
-    HWND hwnd = CreateWindowExW(0, CLASS_NAME, L"xToolsMenu Settings", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, CW_USEDEFAULT, CW_USEDEFAULT, 420, 580, NULL, NULL, hInstance, NULL);
+    HWND hwnd = CreateWindowExW(0, CLASS_NAME, L"xToolsMenu Settings", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, CW_USEDEFAULT, CW_USEDEFAULT, 420, 620, NULL, NULL, hInstance, NULL);
     if (!hwnd) return 0;
     BOOL useDarkMode = TRUE;
     DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDarkMode, sizeof(useDarkMode));

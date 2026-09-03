@@ -89,30 +89,6 @@ IFACEMETHODIMP XToolsMenuCommand::GetSite(REFIID riid, void** ppvSite)
 IFACEMETHODIMP XToolsSubCommand::GetTitle(IShellItemArray* psiItemArray, LPWSTR* ppszName)
 {
     std::wstring title = _title;
-    if (psiItemArray && (_action == XToolsAction::MakeHidden || _action == XToolsAction::MakeSuperHidden))
-    {
-        DWORD count = 0;
-        psiItemArray->GetCount(&count);
-        if (count == 1)
-        {
-            ComPtr<IShellItem> item;
-            if (SUCCEEDED(psiItemArray->GetItemAt(0, &item)))
-            {
-                LPWSTR name = nullptr;
-                if (SUCCEEDED(item->GetDisplayName(SIGDN_PARENTRELATIVEPARSING, &name)))
-                {
-                    std::wstring type = (_action == XToolsAction::MakeHidden) ? L"Hidden" : L"Super Hidden";
-                    title = L"Make '" + std::wstring(name) + L"' " + type;
-                    CoTaskMemFree(name);
-                }
-            }
-        }
-        else if (count > 1)
-        {
-            std::wstring type = (_action == XToolsAction::MakeHidden) ? L"Hidden" : L"Super Hidden";
-            title = L"Make " + std::to_wstring(count) + L" items " + type;
-        }
-    }
     return SHStrDupW(title.c_str(), ppszName);
 }
 
@@ -178,6 +154,11 @@ IFACEMETHODIMP XToolsSubCommand::GetState(IShellItemArray* psiItemArray, BOOL, E
     if (!psiItemArray)
     {
         isBackground = true;
+        if (_action == XToolsAction::Custom && !_showBG)
+        {
+            *pCmdState = ECS_HIDDEN;
+            return S_OK;
+        }
         if (_action == XToolsAction::CopyName || _action == XToolsAction::CopyPath || _action == XToolsAction::EditWith || _action == XToolsAction::TakeOwnership)
         {
             *pCmdState = ECS_HIDDEN;
@@ -198,6 +179,11 @@ IFACEMETHODIMP XToolsSubCommand::GetState(IShellItemArray* psiItemArray, BOOL, E
                 if (SUCCEEDED(item->GetAttributes(SFGAO_FOLDER, &attrs)))
                 {
                     isFolder = (attrs & SFGAO_FOLDER);
+                    if (_action == XToolsAction::Custom)
+                    {
+                        if (isFolder && !_showDir) { *pCmdState = ECS_HIDDEN; return S_OK; }
+                        if (!isFolder && !_showFile) { *pCmdState = ECS_HIDDEN; return S_OK; }
+                    }
                     if (isFolder)
                     {
                         if (_action == XToolsAction::SystemFolders || _action == XToolsAction::PasteToFile || _action == XToolsAction::EditWith)
@@ -514,11 +500,16 @@ HRESULT XToolsCommandEnumerator::RuntimeClassInitialize()
             if (RegEnumKeyExW(hKey, i, name, &nSize, NULL, NULL, NULL, NULL) == ERROR_SUCCESS)
             {
                 WCHAR path[MAX_PATH], args[MAX_PATH]; DWORD pSize = sizeof(path), aSize = sizeof(args);
-                if (RegGetValueW(hKey, name, L"Path", RRF_RT_REG_SZ, NULL, path, &pSize) == ERROR_SUCCESS &&
-                    RegGetValueW(hKey, name, L"Args", RRF_RT_REG_SZ, NULL, args, &aSize) == ERROR_SUCCESS)
-                {
-                    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, name, XToolsAction::Custom, path, args))) _commands.push_back(cmd);
-                }
+                DWORD showFile = 1, showDir = 1, showBG = 1;
+                DWORD dwSize = sizeof(DWORD);
+
+                RegGetValueW(hKey, name, L"Path", RRF_RT_REG_SZ, NULL, path, &pSize);
+                RegGetValueW(hKey, name, L"Args", RRF_RT_REG_SZ, NULL, args, &aSize);
+                RegGetValueW(hKey, name, L"ShowFile", RRF_RT_REG_DWORD, NULL, &showFile, &dwSize);
+                RegGetValueW(hKey, name, L"ShowDir", RRF_RT_REG_DWORD, NULL, &showDir, &dwSize);
+                RegGetValueW(hKey, name, L"ShowBG", RRF_RT_REG_DWORD, NULL, &showBG, &dwSize);
+
+                if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, name, XToolsAction::Custom, path, args, showFile, showDir, showBG))) _commands.push_back(cmd);
             }
         }
         RegCloseKey(hKey);
