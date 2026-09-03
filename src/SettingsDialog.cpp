@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <uxtheme.h>
 #include "resource.h"
 #include "Theme.h"
 
@@ -16,6 +17,7 @@
 #pragma comment(lib, "gdi32.lib")
 #pragma comment(lib, "shell32.lib")
 #pragma comment(lib, "comdlg32.lib")
+#pragma comment(lib, "uxtheme.lib")
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
@@ -89,15 +91,15 @@ void LoadCustomCommands() {
         DWORD subKeys;
         RegQueryInfoKeyW(hKey, NULL, NULL, NULL, &subKeys, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
         for (DWORD i = 0; i < subKeys; i++) {
-            WCHAR subKeyName[256];
+            WCHAR name[256];
             DWORD nameSize = 256;
-            if (RegEnumKeyExW(hKey, i, subKeyName, &nameSize, NULL, NULL, NULL, NULL) == ERROR_SUCCESS) {
+            if (RegEnumKeyExW(hKey, i, name, &nameSize, NULL, NULL, NULL, NULL) == ERROR_SUCCESS) {
                 WCHAR path[MAX_PATH] = { 0 }, args[MAX_PATH] = { 0 };
                 DWORD pSize = sizeof(path), aSize = sizeof(args);
-                RegGetValueW(hKey, subKeyName, L"Path", RRF_RT_REG_SZ, NULL, path, &pSize);
-                RegGetValueW(hKey, subKeyName, L"Args", RRF_RT_REG_SZ, NULL, args, &aSize);
+                RegGetValueW(hKey, name, L"Path", RRF_RT_REG_SZ, NULL, path, &pSize);
+                RegGetValueW(hKey, name, L"Args", RRF_RT_REG_SZ, NULL, args, &aSize);
                 LVITEMW lvi = { LVIF_TEXT, (int)i };
-                lvi.pszText = subKeyName;
+                lvi.pszText = name;
                 ListView_InsertItem(g_hListCustom, &lvi);
                 ListView_SetItemText(g_hListCustom, i, 1, path);
                 ListView_SetItemText(g_hListCustom, i, 2, args);
@@ -126,6 +128,30 @@ void UpdateTabVisibility() {
     ShowWindow(g_hStaticName, bCustom ? SW_SHOW : SW_HIDE);
     ShowWindow(g_hStaticPath, bCustom ? SW_SHOW : SW_HIDE);
     ShowWindow(g_hStaticArgs, bCustom ? SW_SHOW : SW_HIDE);
+}
+
+// Subclass for the Tab Control to paint background
+LRESULT CALLBACK TabSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+    if (uMsg == WM_ERASEBKGND) {
+        HDC hdc = (HDC)wParam;
+        RECT rect;
+        GetClientRect(hWnd, &rect);
+        FillRect(hdc, &rect, g_hbrBackground);
+        return 1;
+    }
+    if (uMsg == WM_PAINT) {
+        // Paint the background manually to avoid white flicker/area
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hWnd, &ps);
+        RECT rect;
+        GetClientRect(hWnd, &rect);
+        FillRect(hdc, &rect, g_hbrBackground);
+        EndPaint(hWnd, &ps);
+
+        // Let the original proc draw the tabs (which are owner-drawn anyway)
+        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+    }
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -170,7 +196,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         ReleaseDC(hwnd, hdc);
         g_hFont = CreateFontW(logHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
 
-        g_hTab = CreateWindowW(WC_TABCONTROLW, L"", WS_CHILD | WS_VISIBLE | TCS_OWNERDRAWFIXED | WS_CLIPSIBLINGS, 10, 10, 380, 480, hwnd, NULL, hInst, NULL);
+        g_hTab = CreateWindowW(WC_TABCONTROLW, L"", WS_CHILD | WS_VISIBLE | TCS_OWNERDRAWFIXED | WS_CLIPSIBLINGS, 10, 10, 380, 520, hwnd, NULL, hInst, NULL);
+        SetWindowSubclass(g_hTab, TabSubclassProc, 0, 0);
         SendMessage(g_hTab, WM_SETFONT, (WPARAM)g_hFont, TRUE);
 
         TCITEMW tie = { TCIF_TEXT };
@@ -183,6 +210,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             int y = 50;
             for (auto& item : group) {
                 item.hWnd = CreateWindowW(L"BUTTON", item.label.c_str(), WS_CHILD | BS_AUTOCHECKBOX, 30, y, 300, 25, hwnd, NULL, hInst, NULL);
+                SetParent(item.hWnd, g_hTab);
                 SendMessage(item.hWnd, WM_SETFONT, (WPARAM)g_hFont, TRUE);
                 SendMessage(item.hWnd, BM_SETCHECK, GetSetting(item.regValue.c_str()) ? BST_CHECKED : BST_UNCHECKED, 0);
                 y += 30;
@@ -192,30 +220,34 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         CreateCheckboxes(g_dirSettings);
         CreateCheckboxes(g_bgSettings);
 
-        g_hListCustom = CreateWindowW(WC_LISTVIEWW, L"", WS_CHILD | LVS_REPORT | LVS_SINGLESEL | WS_BORDER, 25, 50, 350, 200, hwnd, NULL, hInst, NULL);
+        g_hListCustom = CreateWindowW(WC_LISTVIEWW, L"", WS_CHILD | LVS_REPORT | LVS_SINGLESEL | WS_BORDER, 20, 40, 340, 200, g_hTab, NULL, hInst, NULL);
         ListView_SetExtendedListViewStyle(g_hListCustom, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES);
         ListView_SetBkColor(g_hListCustom, DARK_CONTROL_BACK);
         ListView_SetTextBkColor(g_hListCustom, DARK_CONTROL_BACK);
         ListView_SetTextColor(g_hListCustom, DARK_TEXT);
 
-        LVCOLUMNW lvc = { LVCF_TEXT | LVCF_WIDTH, 0, 100, (LPWSTR)L"Name" };
-        ListView_InsertColumn(g_hListCustom, 0, &lvc);
-        lvc.pszText = (LPWSTR)L"Path"; lvc.cx = 150; ListView_InsertColumn(g_hListCustom, 1, &lvc);
-        lvc.pszText = (LPWSTR)L"Args"; lvc.cx = 90; ListView_InsertColumn(g_hListCustom, 2, &lvc);
+        // Theme the ListView Header
+        HWND hHeader = ListView_GetHeader(g_hListCustom);
+        SetWindowTheme(hHeader, L"", L"");
 
-        int y = 260;
-        g_hStaticName = CreateWindowW(L"STATIC", L"Name:", WS_CHILD, 25, y, 50, 25, hwnd, NULL, hInst, NULL);
-        g_hEditName = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD, 80, y, 200, 25, hwnd, NULL, hInst, NULL);
+        LVCOLUMNW lvc = { LVCF_TEXT | LVCF_WIDTH, 0, 90, (LPWSTR)L"Name" };
+        ListView_InsertColumn(g_hListCustom, 0, &lvc);
+        lvc.pszText = (LPWSTR)L"Path"; lvc.cx = 140; ListView_InsertColumn(g_hListCustom, 1, &lvc);
+        lvc.pszText = (LPWSTR)L"Args"; lvc.cx = 80; ListView_InsertColumn(g_hListCustom, 2, &lvc);
+
+        int y = 250;
+        g_hStaticName = CreateWindowW(L"STATIC", L"Name:", WS_CHILD, 20, y, 50, 25, g_hTab, NULL, hInst, NULL);
+        g_hEditName = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD, 70, y, 200, 25, g_hTab, NULL, hInst, NULL);
         y += 35;
-        g_hStaticPath = CreateWindowW(L"STATIC", L"Path:", WS_CHILD, 25, y, 50, 25, hwnd, NULL, hInst, NULL);
-        g_hEditPath = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD, 80, y, 250, 25, hwnd, NULL, hInst, NULL);
-        g_hBtnBrowse = CreateWindowW(L"BUTTON", L"...", WS_CHILD | BS_OWNERDRAW, 340, y, 35, 25, hwnd, (HMENU)102, hInst, NULL);
+        g_hStaticPath = CreateWindowW(L"STATIC", L"Path:", WS_CHILD, 20, y, 50, 25, g_hTab, NULL, hInst, NULL);
+        g_hEditPath = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD, 70, y, 240, 25, g_hTab, NULL, hInst, NULL);
+        g_hBtnBrowse = CreateWindowW(L"BUTTON", L"...", WS_CHILD | BS_OWNERDRAW, 315, y, 35, 25, g_hTab, (HMENU)102, hInst, NULL);
         y += 35;
-        g_hStaticArgs = CreateWindowW(L"STATIC", L"Args:", WS_CHILD, 25, y, 50, 25, hwnd, NULL, hInst, NULL);
-        g_hEditArgs = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD, 80, y, 295, 25, hwnd, NULL, hInst, NULL);
+        g_hStaticArgs = CreateWindowW(L"STATIC", L"Args:", WS_CHILD, 20, y, 50, 25, g_hTab, NULL, hInst, NULL);
+        g_hEditArgs = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD, 70, y, 280, 25, g_hTab, NULL, hInst, NULL);
         y += 45;
-        g_hBtnAdd = CreateWindowW(L"BUTTON", L"Add", WS_CHILD | BS_OWNERDRAW, 80, y, 100, 30, hwnd, (HMENU)100, hInst, NULL);
-        g_hBtnDel = CreateWindowW(L"BUTTON", L"Delete", WS_CHILD | BS_OWNERDRAW, 190, y, 100, 30, hwnd, (HMENU)101, hInst, NULL);
+        g_hBtnAdd = CreateWindowW(L"BUTTON", L"Add", WS_CHILD | BS_OWNERDRAW, 70, y, 100, 30, g_hTab, (HMENU)100, hInst, NULL);
+        g_hBtnDel = CreateWindowW(L"BUTTON", L"Delete", WS_CHILD | BS_OWNERDRAW, 180, y, 100, 30, g_hTab, (HMENU)101, hInst, NULL);
 
         EnumChildWindows(hwnd, [](HWND hChild, LPARAM lp) -> BOOL {
             SendMessage(hChild, WM_SETFONT, (WPARAM)g_hFont, TRUE);
@@ -289,7 +321,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         LPNMHDR nmhdr = (LPNMHDR)lParam;
         if (nmhdr->code == TCN_SELCHANGE) {
             UpdateTabVisibility();
-            InvalidateRect(hwnd, NULL, TRUE);
+            InvalidateRect(g_hTab, NULL, TRUE);
         }
         return 0;
     }
@@ -311,7 +343,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     HICON hIcon = (HICON)LoadImage(hInstance, MAKEINTRESOURCE(IDI_ICON1), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
     WNDCLASSEXW wc = { sizeof(WNDCLASSEX), CS_HREDRAW | CS_VREDRAW, WindowProc, 0, 0, hInstance, hIcon, LoadCursor(NULL, IDC_ARROW), g_hbrBackground, NULL, CLASS_NAME, hIcon };
     RegisterClassExW(&wc);
-    HWND hwnd = CreateWindowExW(0, CLASS_NAME, L"xToolsMenu Settings", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, CW_USEDEFAULT, CW_USEDEFAULT, 420, 560, NULL, NULL, hInstance, NULL);
+    HWND hwnd = CreateWindowExW(0, CLASS_NAME, L"xToolsMenu Settings", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, CW_USEDEFAULT, CW_USEDEFAULT, 420, 580, NULL, NULL, hInstance, NULL);
     if (!hwnd) return 0;
     BOOL useDarkMode = TRUE;
     DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDarkMode, sizeof(useDarkMode));
