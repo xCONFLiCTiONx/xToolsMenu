@@ -33,21 +33,6 @@ if (!(Test-Path $InProcKey)) { New-Item -Path $InProcKey -Force | Out-Null }
 Set-ItemProperty -Path $InProcKey -Name "(Default)" -Value $DllPath
 Set-ItemProperty -Path $InProcKey -Name "ThreadingModel" -Value "Apartment"
 
-Write-Host "Registering Legacy Context Menu Handler..."
-$ShellKeys = @(
-    "HKCU:\Software\Classes\Directory\shell\xToolsMenu",
-    "HKCU:\Software\Classes\Directory\Background\shell\xToolsMenu",
-    "HKCU:\Software\Classes\Drive\shell\xToolsMenu",
-    "HKCU:\Software\Classes\*\shell\xToolsMenu"
-)
-
-foreach ($key in $ShellKeys) {
-    if (!(Test-Path $key)) { New-Item -Path $key -Force | Out-Null }
-    Set-ItemProperty -Path $key -Name "ExplorerCommandHandler" -Value $Clsid
-    Set-ItemProperty -Path $key -Name "MUIVerb" -Value "xToolsMenu"
-    Set-ItemProperty -Path $key -Name "Icon" -Value "imageres.dll,-166"
-}
-
 Write-Host "Unregistering Sparse Package if exists..."
 try {
     $pkg = Get-AppxPackage -Name xToolsMenu.Extension
