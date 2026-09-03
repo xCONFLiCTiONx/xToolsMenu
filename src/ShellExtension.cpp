@@ -358,13 +358,9 @@ IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiItemArray, IBindCtx*
                 PathRemoveFileSpecW(szDir);
             }
 
-            std::wstring parameters;
-            if (_action == XToolsAction::TerminalAdmin)
-            {
-                parameters = L"/s /k pushd \"" + std::wstring(szDir) + L"\"";
-            }
+            std::wstring parameters = L"-d \"" + std::wstring(szDir) + L"\"";
 
-            ShellExecuteW(NULL, _action == XToolsAction::TerminalAdmin ? L"runas" : L"open", L"cmd.exe", parameters.empty() ? NULL : parameters.c_str(), szDir, SW_SHOWNORMAL);
+            ShellExecuteW(NULL, _action == XToolsAction::TerminalAdmin ? L"runas" : L"open", L"wt.exe", parameters.c_str(), szDir, SW_SHOWNORMAL);
             CoTaskMemFree(path);
         }
     }
