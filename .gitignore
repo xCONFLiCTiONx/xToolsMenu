@@ -433,3 +433,11 @@ FodyWeavers.xsd
 .idea
 *.exe
 AppPackage
+*.pfx
+build_installer.bat
+build.bat
+installer.iss
+Register.bat
+register.ps1
+Reinstall.bat
+unregister.bat
