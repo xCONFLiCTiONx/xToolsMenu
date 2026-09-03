@@ -179,13 +179,24 @@ IFACEMETHODIMP XToolsSubCommand::GetState(IShellItemArray* psiItemArray, BOOL, E
         {
             bool isFolder = (attributes & SFGAO_FOLDER);
 
-            if (_action == XToolsAction::EditWith && isFolder)
+            if (isFolder)
             {
-                *pCmdState = ECS_HIDDEN;
+                // For Directory selection, hide these
+                if (_action == XToolsAction::Terminal ||
+                    _action == XToolsAction::SystemFolders ||
+                    _action == XToolsAction::PasteToFile ||
+                    _action == XToolsAction::EditWith)
+                {
+                    *pCmdState = ECS_HIDDEN;
+                }
             }
-            else if (_action == XToolsAction::PasteToFile && !isFolder)
+            else
             {
-                *pCmdState = ECS_HIDDEN;
+                // For File selection, hide these
+                if (_action == XToolsAction::PasteToFile)
+                {
+                    *pCmdState = ECS_HIDDEN;
+                }
             }
         }
     }
