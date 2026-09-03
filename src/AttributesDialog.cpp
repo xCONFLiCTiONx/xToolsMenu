@@ -5,6 +5,7 @@
 #include <commctrl.h>
 #include <string>
 #include <vector>
+#include "resource.h"
 
 #pragma comment(lib, "dwmapi.lib")
 #pragma comment(lib, "user32.lib")
@@ -276,6 +277,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     wc.hInstance = hInstance;
     wc.lpszClassName = CLASS_NAME;
     wc.hbrBackground = g_hbrBackground;
+    wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_ICON1));
 
     RegisterClassW(&wc);
 
@@ -292,22 +294,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
         CW_USEDEFAULT, CW_USEDEFAULT, 420, 280, NULL, NULL, hInstance, NULL);
 
     if (hwnd == NULL) return 0;
-
-    // Set Window Icon
-    WCHAR szPath[MAX_PATH];
-    GetModuleFileNameW(NULL, szPath, ARRAYSIZE(szPath));
-    while (PathRemoveFileSpecW(szPath)) {
-        WCHAR szIconPath[MAX_PATH];
-        wcscpy_s(szIconPath, szPath);
-        PathAppendW(szIconPath, L"ICON.ico");
-        if (PathFileExistsW(szIconPath)) {
-            HICON hIconBig = (HICON)LoadImageW(NULL, szIconPath, IMAGE_ICON, GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), LR_LOADFROMFILE);
-            HICON hIconSmall = (HICON)LoadImageW(NULL, szIconPath, IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_LOADFROMFILE);
-            if (hIconBig) SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIconBig);
-            if (hIconSmall) SendMessage(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIconSmall);
-            break;
-        }
-    }
 
     BOOL useDarkMode = TRUE;
     DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDarkMode, sizeof(useDarkMode));

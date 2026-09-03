@@ -33,24 +33,29 @@ msbuild xToolsMenu.slnx /p:Configuration=Release /p:Platform=x64
 echo Building companion executables...
 if not exist "x64\Release" mkdir "x64\Release"
 
+:: Compile Resources
+if exist "src\app.rc" (
+    rc.exe /fo src\app.res src\app.rc
+)
+
 if exist "src\Launcher.cpp" (
-    cl /nologo /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\Launcher.exe src\Launcher.cpp /link /SUBSYSTEM:WINDOWS user32.lib
+    cl /nologo /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\Launcher.exe src\Launcher.cpp src\app.res /link /SUBSYSTEM:WINDOWS user32.lib
 ) else (
     echo Error: src\Launcher.cpp not found!
 )
 
 if exist "src\AttributesDialog.cpp" (
-    cl /nologo /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\AttributesDialog.exe src\AttributesDialog.cpp /link /SUBSYSTEM:WINDOWS user32.lib dwmapi.lib advapi32.lib shell32.lib comctl32.lib
+    cl /nologo /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\AttributesDialog.exe src\AttributesDialog.cpp src\app.res /link /SUBSYSTEM:WINDOWS user32.lib dwmapi.lib advapi32.lib shell32.lib comctl32.lib
 ) else (
     echo Error: src\AttributesDialog.cpp not found!
 )
 
 if exist "src\EditWithDialog.cpp" (
-    cl /nologo /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\EditWithDialog.exe src\EditWithDialog.cpp /link /SUBSYSTEM:WINDOWS user32.lib dwmapi.lib advapi32.lib shell32.lib comctl32.lib comdlg32.lib
+    cl /nologo /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\EditWithDialog.exe src\EditWithDialog.cpp src\app.res /link /SUBSYSTEM:WINDOWS user32.lib dwmapi.lib advapi32.lib shell32.lib comctl32.lib comdlg32.lib
 )
 
 if exist "src\SystemFoldersDialog.cpp" (
-    cl /nologo /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\SystemFoldersDialog.exe src\SystemFoldersDialog.cpp /link /SUBSYSTEM:WINDOWS user32.lib dwmapi.lib advapi32.lib shell32.lib comctl32.lib
+    cl /nologo /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\SystemFoldersDialog.exe src\SystemFoldersDialog.cpp src\app.res /link /SUBSYSTEM:WINDOWS user32.lib dwmapi.lib advapi32.lib shell32.lib comctl32.lib
 )
 
 echo Build complete!

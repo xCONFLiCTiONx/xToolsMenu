@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <algorithm>
+#include "resource.h"
 
 #pragma comment(lib, "dwmapi.lib")
 #pragma comment(lib, "user32.lib")
@@ -155,6 +156,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     wc.hInstance = hInstance;
     wc.lpszClassName = CLASS_NAME;
     wc.hbrBackground = g_hbrBackground;
+    wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_ICON1));
 
     RegisterClassW(&wc);
 
