@@ -49,11 +49,15 @@ private:
 class XToolsSubCommand : public RuntimeClass<RuntimeClassFlags<ClassicCom>, IExplorerCommand, IObjectWithSite>
 {
 public:
-    HRESULT RuntimeClassInitialize(PCWSTR title, XToolsAction action, PCWSTR icon = nullptr, PCWSTR data = nullptr) {
+    HRESULT RuntimeClassInitialize(PCWSTR title, XToolsAction action, PCWSTR icon = nullptr, PCWSTR data = nullptr,
+                                 BOOL showFile = TRUE, BOOL showDir = TRUE, BOOL showBG = TRUE) {
         _title = title;
         _action = action;
         _icon = icon ? icon : L"";
         _data = data ? data : L"";
+        _showFile = showFile;
+        _showDir = showDir;
+        _showBG = showBG;
         return S_OK;
     }
 
@@ -75,6 +79,9 @@ private:
     XToolsAction _action;
     std::wstring _icon;
     std::wstring _data;
+    BOOL _showFile;
+    BOOL _showDir;
+    BOOL _showBG;
     ComPtr<IUnknown> _spUnkSite;
 };
 
