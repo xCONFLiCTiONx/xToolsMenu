@@ -21,6 +21,33 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
     return TRUE;
 }
 
+static HRESULT ResolveRelativeIconPath(PCWSTR pszRelativePath, LPWSTR* ppszIcon)
+{
+    if (!pszRelativePath || !*pszRelativePath) return E_INVALIDARG;
+
+    // If it's already an absolute path (contains :) or a resource string (contains ,), return as is
+    if (wcschr(pszRelativePath, L':') || wcschr(pszRelativePath, L','))
+    {
+        return SHStrDupW(pszRelativePath, ppszIcon);
+    }
+
+    WCHAR szPath[MAX_PATH];
+    if (GetModuleFileNameW(g_hInst, szPath, ARRAYSIZE(szPath)))
+    {
+        while (PathRemoveFileSpecW(szPath))
+        {
+            WCHAR szIconPath[MAX_PATH];
+            wcscpy_s(szIconPath, szPath);
+            PathAppendW(szIconPath, pszRelativePath);
+            if (PathFileExistsW(szIconPath))
+            {
+                return SHStrDupW(szIconPath, ppszIcon);
+            }
+        }
+    }
+    return E_FAIL;
+}
+
 // IExplorerCommand implementation for root menu
 IFACEMETHODIMP XToolsMenuCommand::GetTitle(IShellItemArray*, LPWSTR* ppszName)
 {
@@ -29,15 +56,8 @@ IFACEMETHODIMP XToolsMenuCommand::GetTitle(IShellItemArray*, LPWSTR* ppszName)
 
 IFACEMETHODIMP XToolsMenuCommand::GetIcon(IShellItemArray*, LPWSTR* ppszIcon)
 {
-    WCHAR szPath[MAX_PATH];
-    GetModuleFileNameW(g_hInst, szPath, ARRAYSIZE(szPath));
-    while (PathRemoveFileSpecW(szPath))
-    {
-        WCHAR szIconPath[MAX_PATH];
-        wcscpy_s(szIconPath, szPath);
-        PathAppendW(szIconPath, L"ICON.ico");
-        if (PathFileExistsW(szIconPath)) return SHStrDupW(szIconPath, ppszIcon);
-    }
+    if (SUCCEEDED(ResolveRelativeIconPath(L"Icons\\ICON.ico", ppszIcon))) return S_OK;
+    if (SUCCEEDED(ResolveRelativeIconPath(L"ICON.ico", ppszIcon))) return S_OK;
     return SHStrDupW(L"shell32.dll,-16769", ppszIcon);
 }
 
@@ -94,15 +114,17 @@ IFACEMETHODIMP XToolsSubCommand::GetTitle(IShellItemArray* psiItemArray, LPWSTR*
 
 IFACEMETHODIMP XToolsSubCommand::GetIcon(IShellItemArray*, LPWSTR* ppszIcon)
 {
-    if (_action == XToolsAction::Custom)
-    {
-        return SHStrDupW(_icon.c_str(), ppszIcon);
-    }
     if (_icon.empty())
     {
         *ppszIcon = nullptr;
         return E_NOTIMPL;
     }
+
+    if (SUCCEEDED(ResolveRelativeIconPath(_icon.c_str(), ppszIcon)))
+    {
+        return S_OK;
+    }
+
     return SHStrDupW(_icon.c_str(), ppszIcon);
 }
 
@@ -543,15 +565,15 @@ HRESULT XToolsCommandEnumerator::RuntimeClassInitialize()
 {
     _current = 0;
     ComPtr<IExplorerCommand> cmd;
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Attributes", XToolsAction::OpenExe, L"C:\\Windows\\System32\\imageres.dll,-166", L"AttributesDialog.exe"))) _commands.push_back(cmd);
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Terminal", XToolsAction::Terminal, L"C:\\Windows\\System32\\imageres.dll,-5324"))) _commands.push_back(cmd);
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Terminal (admin)", XToolsAction::TerminalAdmin, L"C:\\Windows\\System32\\imageres.dll,-5324"))) _commands.push_back(cmd);
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Edit with", XToolsAction::EditWith, L"C:\\Windows\\System32\\shell32.dll,-243"))) _commands.push_back(cmd);
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"System Folders", XToolsAction::SystemFolders, L"C:\\Windows\\System32\\imageres.dll,-3"))) _commands.push_back(cmd);
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Paste to File", XToolsAction::PasteToFile, L"C:\\Windows\\System32\\shell32.dll,-16763"))) _commands.push_back(cmd);
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Copy Name", XToolsAction::CopyName, L"C:\\Windows\\System32\\shell32.dll,-134"))) _commands.push_back(cmd);
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Copy Path", XToolsAction::CopyPath, L"C:\\Windows\\System32\\shell32.dll,-135"))) _commands.push_back(cmd);
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Take Ownership", XToolsAction::TakeOwnership, L"C:\\Windows\\System32\\imageres.dll,-78"))) _commands.push_back(cmd);
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Attributes", XToolsAction::OpenExe, L"Icons\\Attributes.svg", L"AttributesDialog.exe"))) _commands.push_back(cmd);
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Terminal", XToolsAction::Terminal, L"Icons\\Terminals.svg"))) _commands.push_back(cmd);
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Terminal (admin)", XToolsAction::TerminalAdmin, L"Icons\\Terminals.svg"))) _commands.push_back(cmd);
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Edit with", XToolsAction::EditWith, L"Icons\\Edit with.svg"))) _commands.push_back(cmd);
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"System Folders", XToolsAction::SystemFolders, L"Icons\\System Folders.svg"))) _commands.push_back(cmd);
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Paste to File", XToolsAction::PasteToFile, L"Icons\\Paste to File.svg"))) _commands.push_back(cmd);
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Copy Name", XToolsAction::CopyName, L"Icons\\Copy Name.svg"))) _commands.push_back(cmd);
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Copy Path", XToolsAction::CopyPath, L"Icons\\Copy Path.svg"))) _commands.push_back(cmd);
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Take Ownership", XToolsAction::TakeOwnership, L"Icons\\Take Ownership.svg"))) _commands.push_back(cmd);
 
     // Load custom commands from registry
     HKEY hKey;
@@ -587,7 +609,7 @@ HRESULT XToolsCommandEnumerator::RuntimeClassInitialize()
         RegCloseKey(hKey);
     }
 
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Settings", XToolsAction::Settings, L"C:\\Windows\\System32\\shell32.dll,-22"))) _commands.push_back(cmd);
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Settings", XToolsAction::Settings, L"Icons\\Settings.svg"))) _commands.push_back(cmd);
     return S_OK;
 }
 
