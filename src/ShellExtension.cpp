@@ -321,7 +321,7 @@ IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiItemArray, IBindCtx*
         std::wstring exePath, baseArgs;
         if (_action == XToolsAction::Custom)
         {
-            exePath = _icon; // Icon stores exe path for custom entries
+            exePath = _exePath;
             baseArgs = _data;
         }
         else
@@ -551,17 +551,24 @@ HRESULT XToolsCommandEnumerator::RuntimeClassInitialize()
             WCHAR name[256]; DWORD nSize = 256;
             if (RegEnumKeyExW(hKey, i, name, &nSize, NULL, NULL, NULL, NULL) == ERROR_SUCCESS)
             {
-                WCHAR path[MAX_PATH], args[MAX_PATH]; DWORD pSize = sizeof(path), aSize = sizeof(args);
+                WCHAR path[MAX_PATH], args[MAX_PATH], iconPath[MAX_PATH];
+                DWORD pSize = sizeof(path), aSize = sizeof(args), iSize = sizeof(iconPath);
                 DWORD showFile = 1, showDir = 1, showBG = 1;
                 DWORD dwSize = sizeof(DWORD);
 
                 RegGetValueW(hKey, name, L"Path", RRF_RT_REG_SZ, NULL, path, &pSize);
                 RegGetValueW(hKey, name, L"Args", RRF_RT_REG_SZ, NULL, args, &aSize);
+
+                if (RegGetValueW(hKey, name, L"IconPath", RRF_RT_REG_SZ, NULL, iconPath, &iSize) != ERROR_SUCCESS)
+                {
+                    wcscpy_s(iconPath, path);
+                }
+
                 RegGetValueW(hKey, name, L"ShowFile", RRF_RT_REG_DWORD, NULL, &showFile, &dwSize);
                 RegGetValueW(hKey, name, L"ShowDir", RRF_RT_REG_DWORD, NULL, &showDir, &dwSize);
                 RegGetValueW(hKey, name, L"ShowBG", RRF_RT_REG_DWORD, NULL, &showBG, &dwSize);
 
-                if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, name, XToolsAction::Custom, path, args, showFile, showDir, showBG))) _commands.push_back(cmd);
+                if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, name, XToolsAction::Custom, iconPath, args, showFile, showDir, showBG, path))) _commands.push_back(cmd);
             }
         }
         RegCloseKey(hKey);
