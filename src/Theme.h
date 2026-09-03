@@ -50,9 +50,23 @@ inline void DrawDarkTab(HWND hTab, LPDRAWITEMSTRUCT lpDrawItem) {
     int iItem = lpDrawItem->itemID;
     BOOL bSelected = (iItem == TabCtrl_GetCurSel(hTab));
 
+    // Fill the tab background
     HBRUSH hbr = CreateSolidBrush(bSelected ? DARK_CONTROL_BACK : DARK_BACKGROUND);
     FillRect(hdc, &rect, hbr);
     DeleteObject(hbr);
+
+    // Border
+    HPEN hPen = CreatePen(PS_SOLID, 1, DARK_BORDER);
+    HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
+    MoveToEx(hdc, rect.left, rect.top, NULL);
+    LineTo(hdc, rect.right, rect.top);
+    LineTo(hdc, rect.right, rect.bottom);
+    if (!bSelected) {
+        LineTo(hdc, rect.left, rect.bottom);
+    }
+    LineTo(hdc, rect.left, rect.top);
+    SelectObject(hdc, hOldPen);
+    DeleteObject(hPen);
 
     TCITEMW tie;
     tie.mask = TCIF_TEXT;
@@ -67,13 +81,4 @@ inline void DrawDarkTab(HWND hTab, LPDRAWITEMSTRUCT lpDrawItem) {
     HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
     DrawTextW(hdc, szText, -1, &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     SelectObject(hdc, hOldFont);
-
-    if (!bSelected) {
-        HPEN hPen = CreatePen(PS_SOLID, 1, DARK_BORDER);
-        HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
-        MoveToEx(hdc, rect.left, rect.bottom - 1, NULL);
-        LineTo(hdc, rect.right, rect.bottom - 1);
-        SelectObject(hdc, hOldPen);
-        DeleteObject(hPen);
-    }
 }

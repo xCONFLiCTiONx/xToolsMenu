@@ -61,7 +61,7 @@ if exist "src\SystemFoldersDialog.cpp" (
 )
 
 if exist "src\SettingsDialog.cpp" (
-    cl /nologo /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\Settings.exe src\SettingsDialog.cpp src\app.res /link /SUBSYSTEM:WINDOWS user32.lib dwmapi.lib advapi32.lib shell32.lib comctl32.lib
+    cl /nologo /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\Settings.exe src\SettingsDialog.cpp src\app.res /link /SUBSYSTEM:WINDOWS user32.lib dwmapi.lib advapi32.lib shell32.lib comctl32.lib comdlg32.lib
 )
 
 endlocal
