@@ -45,5 +45,13 @@ if exist "src\AttributesDialog.cpp" (
     echo Error: src\AttributesDialog.cpp not found!
 )
 
+if exist "src\EditWithDialog.cpp" (
+    cl /nologo /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\EditWithDialog.exe src\EditWithDialog.cpp /link /SUBSYSTEM:WINDOWS user32.lib dwmapi.lib advapi32.lib shell32.lib comctl32.lib comdlg32.lib
+)
+
+if exist "src\SystemFoldersDialog.cpp" (
+    cl /nologo /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\SystemFoldersDialog.exe src\SystemFoldersDialog.cpp /link /SUBSYSTEM:WINDOWS user32.lib dwmapi.lib advapi32.lib shell32.lib comctl32.lib
+)
+
 echo Build complete!
 endlocal

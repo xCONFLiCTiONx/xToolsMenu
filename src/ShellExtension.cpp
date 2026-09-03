@@ -145,20 +145,48 @@ IFACEMETHODIMP XToolsSubCommand::GetCanonicalName(GUID* pguidCommandName)
     return E_NOTIMPL;
 }
 
-IFACEMETHODIMP XToolsSubCommand::GetState(IShellItemArray*, BOOL, EXPCMDSTATE* pCmdState)
+IFACEMETHODIMP XToolsSubCommand::GetState(IShellItemArray* psiItemArray, BOOL, EXPCMDSTATE* pCmdState)
 {
     *pCmdState = ECS_ENABLED;
+
+    if (_action == XToolsAction::EditWith && psiItemArray)
+    {
+        DWORD count = 0;
+        psiItemArray->GetCount(&count);
+        for (DWORD i = 0; i < count; i++)
+        {
+            ComPtr<IShellItem> item;
+            if (SUCCEEDED(psiItemArray->GetItemAt(i, &item)))
+            {
+                SFGAOF attributes;
+                if (SUCCEEDED(item->GetAttributes(SFGAO_FOLDER, &attributes)))
+                {
+                    if (attributes & SFGAO_FOLDER)
+                    {
+                        *pCmdState = ECS_HIDDEN;
+                        return S_OK;
+                    }
+                }
+            }
+        }
+    }
+
     return S_OK;
 }
 
 IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiItemArray, IBindCtx*)
 {
-    if (_action == XToolsAction::OpenExe)
+    if (_action == XToolsAction::OpenExe || _action == XToolsAction::EditWith || _action == XToolsAction::SystemFolders)
     {
         WCHAR szModule[MAX_PATH];
         GetModuleFileNameW(g_hInst, szModule, ARRAYSIZE(szModule));
         PathRemoveFileSpecW(szModule);
-        PathAppendW(szModule, _data.c_str());
+
+        std::wstring exeName = _data;
+        if (_action == XToolsAction::EditWith) exeName = L"EditWithDialog.exe";
+        else if (_action == XToolsAction::SystemFolders) exeName = L"SystemFoldersDialog.exe";
+
+        PathAppendW(szModule, exeName.c_str());
 
         std::wstring params;
         if (psiItemArray)
@@ -184,6 +212,97 @@ IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiItemArray, IBindCtx*
 
         ShellExecuteW(NULL, L"open", szModule, params.empty() ? NULL : params.c_str(), NULL, SW_SHOWNORMAL);
     }
+    else if (_action == XToolsAction::Terminal)
+    {
+        if (psiItemArray)
+        {
+            ComPtr<IShellItem> item;
+            if (SUCCEEDED(psiItemArray->GetItemAt(0, &item)))
+            {
+                LPWSTR path = nullptr;
+                if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path)))
+                {
+                    WCHAR szDir[MAX_PATH];
+                    wcscpy_s(szDir, path);
+
+                    DWORD attrs = GetFileAttributesW(path);
+                    if (!(attrs & FILE_ATTRIBUTE_DIRECTORY))
+                    {
+                        PathRemoveFileSpecW(szDir);
+                    }
+
+                    ShellExecuteW(NULL, L"open", L"cmd.exe", NULL, szDir, SW_SHOWNORMAL);
+                    CoTaskMemFree(path);
+                }
+            }
+        }
+    }
+    else if (_action == XToolsAction::CopyName || _action == XToolsAction::CopyPath)
+    {
+        if (psiItemArray)
+        {
+            std::wstring text;
+            DWORD count = 0;
+            psiItemArray->GetCount(&count);
+            for (DWORD i = 0; i < count; i++)
+            {
+                ComPtr<IShellItem> item;
+                if (SUCCEEDED(psiItemArray->GetItemAt(i, &item)))
+                {
+                    LPWSTR path = nullptr;
+                    if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path)))
+                    {
+                        if (!text.empty()) text += L"\r\n";
+                        if (_action == XToolsAction::CopyName)
+                            text += PathFindFileNameW(path);
+                        else
+                            text += path;
+                        CoTaskMemFree(path);
+                    }
+                }
+            }
+
+            if (OpenClipboard(NULL))
+            {
+                EmptyClipboard();
+                size_t size = (text.length() + 1) * sizeof(wchar_t);
+                HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, size);
+                if (hMem)
+                {
+                    void* pMem = GlobalLock(hMem);
+                    if (pMem)
+                    {
+                        memcpy(pMem, text.c_str(), size);
+                        GlobalUnlock(hMem);
+                        SetClipboardData(CF_UNICODETEXT, hMem);
+                    }
+                }
+                CloseClipboard();
+            }
+        }
+    }
+    else if (_action == XToolsAction::TakeOwnership)
+    {
+        if (psiItemArray)
+        {
+            DWORD count = 0;
+            psiItemArray->GetCount(&count);
+            for (DWORD i = 0; i < count; i++)
+            {
+                ComPtr<IShellItem> item;
+                if (SUCCEEDED(psiItemArray->GetItemAt(i, &item)))
+                {
+                    LPWSTR path = nullptr;
+                    if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path)))
+                    {
+                        std::wstring cmd = L"/c takeown /f \"" + std::wstring(path) + L"\" /r /d y & icacls \"" + std::wstring(path) + L"\" /grant administrators:F /t";
+                        ShellExecuteW(NULL, L"runas", L"cmd.exe", cmd.c_str(), NULL, SW_HIDE);
+                        CoTaskMemFree(path);
+                    }
+                }
+            }
+        }
+    }
     return S_OK;
 }
 
@@ -205,8 +324,28 @@ HRESULT XToolsCommandEnumerator::RuntimeClassInitialize()
     _current = 0;
     ComPtr<IExplorerCommand> cmd;
 
-    // Use full path to imageres.dll to bypass potential icon cache issues
     if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Attributes", XToolsAction::OpenExe, L"C:\\Windows\\System32\\imageres.dll,-166", L"AttributesDialog.exe")))
+        _commands.push_back(cmd);
+
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Terminal", XToolsAction::Terminal, L"C:\\Windows\\System32\\imageres.dll,-5324")))
+        _commands.push_back(cmd);
+
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Edit with", XToolsAction::EditWith, L"C:\\Windows\\System32\\shell32.dll,-243")))
+        _commands.push_back(cmd);
+
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"System Folders", XToolsAction::SystemFolders, L"C:\\Windows\\System32\\imageres.dll,-3")))
+        _commands.push_back(cmd);
+
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Copy Name", XToolsAction::CopyName, L"C:\\Windows\\System32\\shell32.dll,-134")))
+        _commands.push_back(cmd);
+
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Copy Path", XToolsAction::CopyPath, L"C:\\Windows\\System32\\shell32.dll,-135")))
+        _commands.push_back(cmd);
+
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Create Junction", XToolsAction::CreateJunction, L"C:\\Windows\\System32\\shell32.dll,-214")))
+        _commands.push_back(cmd);
+
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Take Ownership", XToolsAction::TakeOwnership, L"C:\\Windows\\System32\\imageres.dll,-78")))
         _commands.push_back(cmd);
 
     return S_OK;
