@@ -179,6 +179,37 @@ IFACEMETHODIMP XToolsSubCommand::GetState(IShellItemArray* psiItemArray, BOOL, E
     return S_OK;
 }
 
+// Helper function to execute a command line process with elevation and wait for completion
+static bool RunElevatedCommand(const std::wstring& parameters)
+{
+    SHELLEXECUTEINFOW sei = { sizeof(sei) };
+    sei.fMask = SEE_MASK_NOCLOSEPROCESS;
+    sei.lpVerb = L"runas";
+    sei.lpFile = L"cmd.exe";
+    sei.lpParameters = parameters.c_str();
+    sei.nShow = SW_HIDE;
+
+    if (ShellExecuteExW(&sei))
+    {
+        if (sei.hProcess != NULL)
+        {
+            WaitForSingleObject(sei.hProcess, INFINITE);
+            CloseHandle(sei.hProcess);
+        }
+        return true;
+    }
+    return false;
+}
+
+// Main function to take ownership and grant access
+static bool TakeOwnershipRecursive(const std::wstring& targetPath)
+{
+    // Combine both commands into one elevated cmd.exe call to minimize UAC prompts
+    std::wstring parameters = L"/c takeown.exe /f \"" + targetPath + L"\" /r /d y & icacls.exe \"" + targetPath + L"\" /grant Administrators:F /t /c /q";
+
+    return RunElevatedCommand(parameters);
+}
+
 IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiItemArray, IBindCtx*)
 {
     if (_action == XToolsAction::OpenExe || _action == XToolsAction::EditWith || _action == XToolsAction::SystemFolders)
@@ -300,8 +331,7 @@ IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiItemArray, IBindCtx*
                     LPWSTR path = nullptr;
                     if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path)))
                     {
-                        std::wstring cmd = L"/c takeown /f \"" + std::wstring(path) + L"\" /r /d y & icacls \"" + std::wstring(path) + L"\" /grant administrators:F /t";
-                        ShellExecuteW(NULL, L"runas", L"cmd.exe", cmd.c_str(), NULL, SW_HIDE);
+                        TakeOwnershipRecursive(path);
                         CoTaskMemFree(path);
                     }
                 }
