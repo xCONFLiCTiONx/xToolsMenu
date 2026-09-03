@@ -17,7 +17,6 @@ enum class XToolsAction {
     SystemFolders,
     CopyName,
     CopyPath,
-    CreateJunction,
     TakeOwnership,
     PasteToFile
 };

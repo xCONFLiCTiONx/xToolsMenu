@@ -405,9 +405,6 @@ HRESULT XToolsCommandEnumerator::RuntimeClassInitialize()
     if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Copy Path", XToolsAction::CopyPath, L"C:\\Windows\\System32\\shell32.dll,-135")))
         _commands.push_back(cmd);
 
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Create Junction", XToolsAction::CreateJunction, L"C:\\Windows\\System32\\shell32.dll,-214")))
-        _commands.push_back(cmd);
-
     if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Take Ownership", XToolsAction::TakeOwnership, L"C:\\Windows\\System32\\imageres.dll,-78")))
         _commands.push_back(cmd);
 
