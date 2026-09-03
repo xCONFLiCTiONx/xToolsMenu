@@ -149,22 +149,27 @@ IFACEMETHODIMP XToolsSubCommand::GetState(IShellItemArray* psiItemArray, BOOL, E
 {
     *pCmdState = ECS_ENABLED;
 
-    if (_action == XToolsAction::EditWith && psiItemArray)
+    if (psiItemArray)
     {
         DWORD count = 0;
         psiItemArray->GetCount(&count);
-        for (DWORD i = 0; i < count; i++)
+        if (count > 0)
         {
             ComPtr<IShellItem> item;
-            if (SUCCEEDED(psiItemArray->GetItemAt(i, &item)))
+            if (SUCCEEDED(psiItemArray->GetItemAt(0, &item)))
             {
                 SFGAOF attributes;
                 if (SUCCEEDED(item->GetAttributes(SFGAO_FOLDER, &attributes)))
                 {
-                    if (attributes & SFGAO_FOLDER)
+                    bool isFolder = (attributes & SFGAO_FOLDER);
+
+                    if (_action == XToolsAction::EditWith && isFolder)
                     {
                         *pCmdState = ECS_HIDDEN;
-                        return S_OK;
+                    }
+                    else if (_action == XToolsAction::PasteToFile && !isFolder)
+                    {
+                        *pCmdState = ECS_HIDDEN;
                     }
                 }
             }
@@ -303,6 +308,55 @@ IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiItemArray, IBindCtx*
             }
         }
     }
+    else if (_action == XToolsAction::PasteToFile)
+    {
+        if (psiItemArray)
+        {
+            ComPtr<IShellItem> item;
+            if (SUCCEEDED(psiItemArray->GetItemAt(0, &item)))
+            {
+                LPWSTR path = nullptr;
+                if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path)))
+                {
+                    WCHAR szDir[MAX_PATH];
+                    wcscpy_s(szDir, path);
+
+                    DWORD attrs = GetFileAttributesW(path);
+                    if (!(attrs & FILE_ATTRIBUTE_DIRECTORY))
+                    {
+                        PathRemoveFileSpecW(szDir);
+                    }
+
+                    PathAppendW(szDir, L"Clipboard.txt");
+
+                    if (OpenClipboard(NULL))
+                    {
+                        HANDLE hData = GetClipboardData(CF_UNICODETEXT);
+                        if (hData)
+                        {
+                            LPCWSTR pText = (LPCWSTR)GlobalLock(hData);
+                            if (pText)
+                            {
+                                HANDLE hFile = CreateFileW(szDir, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+                                if (hFile != INVALID_HANDLE_VALUE)
+                                {
+                                    DWORD written;
+                                    WORD bom = 0xFEFF;
+                                    WriteFile(hFile, &bom, 2, &written, NULL);
+                                    WriteFile(hFile, pText, (DWORD)(wcslen(pText) * sizeof(wchar_t)), &written, NULL);
+                                    CloseHandle(hFile);
+                                }
+                                GlobalUnlock(hData);
+                            }
+                        }
+                        CloseClipboard();
+                        SHChangeNotify(SHCNE_CREATE, SHCNF_PATHW, szDir, NULL);
+                    }
+                    CoTaskMemFree(path);
+                }
+            }
+        }
+    }
     return S_OK;
 }
 
@@ -334,6 +388,9 @@ HRESULT XToolsCommandEnumerator::RuntimeClassInitialize()
         _commands.push_back(cmd);
 
     if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"System Folders", XToolsAction::SystemFolders, L"C:\\Windows\\System32\\imageres.dll,-3")))
+        _commands.push_back(cmd);
+
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Paste to File", XToolsAction::PasteToFile, L"C:\\Windows\\System32\\shell32.dll,-16763")))
         _commands.push_back(cmd);
 
     if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Copy Name", XToolsAction::CopyName, L"C:\\Windows\\System32\\shell32.dll,-134")))
