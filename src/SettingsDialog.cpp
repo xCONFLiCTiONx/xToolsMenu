@@ -102,8 +102,8 @@ void LoadCustomCommands() {
                 LVITEMW lvi = { LVIF_TEXT, (int)i };
                 lvi.pszText = name;
                 ListView_InsertItem(g_hListCustom, &lvi);
-                ListView_SetItemText(g_hListCustom, i, 1, path);
-                ListView_SetItemText(g_hListCustom, i, 2, args);
+                ListView_SetItemText(g_hListCustom, (int)i, 1, path);
+                ListView_SetItemText(g_hListCustom, (int)i, 2, args);
             }
         }
         RegCloseKey(hKey);
@@ -134,7 +134,6 @@ void UpdateTabVisibility() {
     ShowWindow(g_hChkBG, bCustom ? SW_SHOW : SW_HIDE);
 }
 
-// Subclass for the Tab Control to paint background
 LRESULT CALLBACK TabSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
     if (uMsg == WM_ERASEBKGND) {
         HDC hdc = (HDC)wParam;
@@ -143,33 +142,27 @@ LRESULT CALLBACK TabSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
         FillRect(hdc, &rect, g_hbrBackground);
         return 1;
     }
-    if (uMsg == WM_PAINT) {
-        PAINTSTRUCT ps;
-        HDC hdc = BeginPaint(hWnd, &ps);
-        RECT rect;
-        GetClientRect(hWnd, &rect);
-        FillRect(hdc, &rect, g_hbrBackground);
-        EndPaint(hWnd, &ps);
-        return DefSubclassProc(hWnd, uMsg, wParam, lParam);
-    }
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
-    case WM_CTLCOLORSTATIC:
+    case WM_CTLCOLORSTATIC: {
+        HDC hdc = (HDC)wParam;
+        SetTextColor(hdc, DARK_TEXT);
+        SetBkMode(hdc, TRANSPARENT);
+        return (LRESULT)g_hbrBackground;
+    }
     case WM_CTLCOLORDLG:
+        return (LRESULT)g_hbrBackground;
     case WM_CTLCOLORBTN:
+        return (LRESULT)g_hbrBackground;
     case WM_CTLCOLOREDIT:
     case WM_CTLCOLORLISTBOX: {
         HDC hdc = (HDC)wParam;
         SetTextColor(hdc, DARK_TEXT);
-        SetBkColor(hdc, DARK_BACKGROUND);
-        if (uMsg == WM_CTLCOLOREDIT || uMsg == WM_CTLCOLORLISTBOX) {
-            SetBkColor(hdc, DARK_CONTROL_BACK);
-            return (LRESULT)g_hbrControlBack;
-        }
-        return (LRESULT)g_hbrBackground;
+        SetBkColor(hdc, DARK_CONTROL_BACK);
+        return (LRESULT)g_hbrControlBack;
     }
     case WM_ERASEBKGND: {
         HDC hdc = (HDC)wParam;
@@ -197,7 +190,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         ReleaseDC(hwnd, hdc);
         g_hFont = CreateFontW(logHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
 
-        g_hTab = CreateWindowW(WC_TABCONTROLW, L"", WS_CHILD | WS_VISIBLE | TCS_OWNERDRAWFIXED | WS_CLIPSIBLINGS, 10, 10, 380, 560, hwnd, NULL, hInst, NULL);
+        g_hTab = CreateWindowW(WC_TABCONTROLW, L"", WS_CHILD | WS_VISIBLE | TCS_OWNERDRAWFIXED | WS_CLIPSIBLINGS, 10, 10, 380, 600, hwnd, NULL, hInst, NULL);
         SetWindowSubclass(g_hTab, TabSubclassProc, 0, 0);
         SendMessage(g_hTab, WM_SETFONT, (WPARAM)g_hFont, TRUE);
 
@@ -211,7 +204,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             int y = 50;
             for (auto& item : group) {
                 item.hWnd = CreateWindowW(L"BUTTON", item.label.c_str(), WS_CHILD | BS_AUTOCHECKBOX, 30, y, 300, 25, hwnd, NULL, hInst, NULL);
-                SetParent(item.hWnd, g_hTab);
                 SendMessage(item.hWnd, WM_SETFONT, (WPARAM)g_hFont, TRUE);
                 SendMessage(item.hWnd, BM_SETCHECK, GetSetting(item.regValue.c_str()) ? BST_CHECKED : BST_UNCHECKED, 0);
                 y += 30;
@@ -221,42 +213,39 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         CreateCheckboxes(g_dirSettings);
         CreateCheckboxes(g_bgSettings);
 
-        g_hListCustom = CreateWindowW(WC_LISTVIEWW, L"", WS_CHILD | LVS_REPORT | LVS_SINGLESEL | WS_BORDER, 20, 40, 340, 200, g_hTab, NULL, hInst, NULL);
+        g_hListCustom = CreateWindowW(WC_LISTVIEWW, L"", WS_CHILD | LVS_REPORT | LVS_SINGLESEL | WS_BORDER, 25, 50, 350, 200, hwnd, NULL, hInst, NULL);
         ListView_SetExtendedListViewStyle(g_hListCustom, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES);
         ListView_SetBkColor(g_hListCustom, DARK_CONTROL_BACK);
         ListView_SetTextBkColor(g_hListCustom, DARK_CONTROL_BACK);
         ListView_SetTextColor(g_hListCustom, DARK_TEXT);
-
-        HWND hHeader = ListView_GetHeader(g_hListCustom);
-        SetWindowTheme(hHeader, L"", L"");
+        SetWindowTheme(ListView_GetHeader(g_hListCustom), L"", L"");
 
         LVCOLUMNW lvc = { LVCF_TEXT | LVCF_WIDTH, 0, 90, (LPWSTR)L"Name" };
         ListView_InsertColumn(g_hListCustom, 0, &lvc);
         lvc.pszText = (LPWSTR)L"Path"; lvc.cx = 140; ListView_InsertColumn(g_hListCustom, 1, &lvc);
         lvc.pszText = (LPWSTR)L"Args"; lvc.cx = 80; ListView_InsertColumn(g_hListCustom, 2, &lvc);
 
-        int y = 250;
-        g_hStaticName = CreateWindowW(L"STATIC", L"Name:", WS_CHILD, 20, y, 50, 25, g_hTab, NULL, hInst, NULL);
-        g_hEditName = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD, 70, y, 200, 25, g_hTab, NULL, hInst, NULL);
+        int y = 260;
+        g_hStaticName = CreateWindowW(L"STATIC", L"Name:", WS_CHILD, 25, y, 50, 25, hwnd, NULL, hInst, NULL);
+        g_hEditName = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD, 80, y, 200, 25, hwnd, NULL, hInst, NULL);
         y += 35;
-        g_hStaticPath = CreateWindowW(L"STATIC", L"Path:", WS_CHILD, 20, y, 50, 25, g_hTab, NULL, hInst, NULL);
-        g_hEditPath = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD, 70, y, 240, 25, g_hTab, NULL, hInst, NULL);
-        g_hBtnBrowse = CreateWindowW(L"BUTTON", L"...", WS_CHILD | BS_OWNERDRAW, 315, y, 35, 25, g_hTab, (HMENU)102, hInst, NULL);
+        g_hStaticPath = CreateWindowW(L"STATIC", L"Path:", WS_CHILD, 25, y, 50, 25, hwnd, NULL, hInst, NULL);
+        g_hEditPath = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD, 80, y, 240, 25, hwnd, NULL, hInst, NULL);
+        g_hBtnBrowse = CreateWindowW(L"BUTTON", L"...", WS_CHILD | BS_OWNERDRAW, 325, y, 35, 25, hwnd, (HMENU)102, hInst, NULL);
         y += 35;
-        g_hStaticArgs = CreateWindowW(L"STATIC", L"Args:", WS_CHILD, 20, y, 50, 25, g_hTab, NULL, hInst, NULL);
-        g_hEditArgs = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD, 70, y, 280, 25, g_hTab, NULL, hInst, NULL);
-
+        g_hStaticArgs = CreateWindowW(L"STATIC", L"Args:", WS_CHILD, 25, y, 50, 25, hwnd, NULL, hInst, NULL);
+        g_hEditArgs = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD, 80, y, 280, 25, hwnd, NULL, hInst, NULL);
         y += 35;
-        g_hChkFile = CreateWindowW(L"BUTTON", L"File", WS_CHILD | BS_AUTOCHECKBOX, 70, y, 60, 25, g_hTab, NULL, hInst, NULL);
-        g_hChkDir = CreateWindowW(L"BUTTON", L"Directory", WS_CHILD | BS_AUTOCHECKBOX, 140, y, 90, 25, g_hTab, NULL, hInst, NULL);
-        g_hChkBG = CreateWindowW(L"BUTTON", L"Directory Background", WS_CHILD | BS_AUTOCHECKBOX, 240, y, 140, 25, g_hTab, NULL, hInst, NULL);
+        g_hChkFile = CreateWindowW(L"BUTTON", L"File", WS_CHILD | BS_AUTOCHECKBOX, 80, y, 60, 25, hwnd, NULL, hInst, NULL);
+        g_hChkDir = CreateWindowW(L"BUTTON", L"Directory", WS_CHILD | BS_AUTOCHECKBOX, 150, y, 90, 25, hwnd, NULL, hInst, NULL);
+        g_hChkBG = CreateWindowW(L"BUTTON", L"Background", WS_CHILD | BS_AUTOCHECKBOX, 250, y, 100, 25, hwnd, NULL, hInst, NULL);
         SendMessage(g_hChkFile, BM_SETCHECK, BST_CHECKED, 0);
         SendMessage(g_hChkDir, BM_SETCHECK, BST_CHECKED, 0);
         SendMessage(g_hChkBG, BM_SETCHECK, BST_CHECKED, 0);
 
         y += 45;
-        g_hBtnAdd = CreateWindowW(L"BUTTON", L"Add", WS_CHILD | BS_OWNERDRAW, 70, y, 100, 30, g_hTab, (HMENU)100, hInst, NULL);
-        g_hBtnDel = CreateWindowW(L"BUTTON", L"Delete", WS_CHILD | BS_OWNERDRAW, 180, y, 100, 30, g_hTab, (HMENU)101, hInst, NULL);
+        g_hBtnAdd = CreateWindowW(L"BUTTON", L"Add", WS_CHILD | BS_OWNERDRAW, 80, y, 100, 30, hwnd, (HMENU)100, hInst, NULL);
+        g_hBtnDel = CreateWindowW(L"BUTTON", L"Delete", WS_CHILD | BS_OWNERDRAW, 190, y, 100, 30, hwnd, (HMENU)101, hInst, NULL);
 
         EnumChildWindows(hwnd, [](HWND hChild, LPARAM lp) -> BOOL {
             SendMessage(hChild, WM_SETFONT, (WPARAM)g_hFont, TRUE);
@@ -274,10 +263,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 GetWindowTextW(g_hEditName, name, 256);
                 GetWindowTextW(g_hEditPath, path, MAX_PATH);
                 GetWindowTextW(g_hEditArgs, args, MAX_PATH);
-                DWORD showFile = (SendMessage(g_hChkFile, BM_GETCHECK, 0, 0) == BST_CHECKED);
-                DWORD showDir = (SendMessage(g_hChkDir, BM_GETCHECK, 0, 0) == BST_CHECKED);
-                DWORD showBG = (SendMessage(g_hChkBG, BM_GETCHECK, 0, 0) == BST_CHECKED);
-
+                DWORD f = (SendMessage(g_hChkFile, BM_GETCHECK, 0, 0) == BST_CHECKED), d = (SendMessage(g_hChkDir, BM_GETCHECK, 0, 0) == BST_CHECKED), b = (SendMessage(g_hChkBG, BM_GETCHECK, 0, 0) == BST_CHECKED);
                 if (wcslen(name) > 0 && wcslen(path) > 0) {
                     HKEY hKey;
                     if (RegCreateKeyExW(HKEY_CURRENT_USER, REG_CUSTOM, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS) {
@@ -285,9 +271,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                         if (RegCreateKeyExW(hKey, name, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, NULL, &hSubKey, NULL) == ERROR_SUCCESS) {
                             RegSetValueExW(hSubKey, L"Path", 0, REG_SZ, (BYTE*)path, (DWORD)(wcslen(path) + 1) * sizeof(wchar_t));
                             RegSetValueExW(hSubKey, L"Args", 0, REG_SZ, (BYTE*)args, (DWORD)(wcslen(args) + 1) * sizeof(wchar_t));
-                            RegSetValueExW(hSubKey, L"ShowFile", 0, REG_DWORD, (BYTE*)&showFile, sizeof(DWORD));
-                            RegSetValueExW(hSubKey, L"ShowDir", 0, REG_DWORD, (BYTE*)&showDir, sizeof(DWORD));
-                            RegSetValueExW(hSubKey, L"ShowBG", 0, REG_DWORD, (BYTE*)&showBG, sizeof(DWORD));
+                            RegSetValueExW(hSubKey, L"ShowFile", 0, REG_DWORD, (BYTE*)&f, sizeof(DWORD));
+                            RegSetValueExW(hSubKey, L"ShowDir", 0, REG_DWORD, (BYTE*)&d, sizeof(DWORD));
+                            RegSetValueExW(hSubKey, L"ShowBG", 0, REG_DWORD, (BYTE*)&b, sizeof(DWORD));
                             RegCloseKey(hSubKey);
                         }
                         RegCloseKey(hKey);
@@ -297,29 +283,19 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             } else if (wmId == 101) { // Delete
                 int sel = ListView_GetNextItem(g_hListCustom, -1, LVNI_SELECTED);
                 if (sel != -1) {
-                    WCHAR name[256];
-                    ListView_GetItemText(g_hListCustom, sel, 0, name, 256);
-                    HKEY hKey;
-                    if (RegOpenKeyExW(HKEY_CURRENT_USER, REG_CUSTOM, 0, KEY_WRITE, &hKey) == ERROR_SUCCESS) {
-                        RegDeleteKeyW(hKey, name);
-                        RegCloseKey(hKey);
-                    }
+                    WCHAR name[256]; ListView_GetItemText(g_hListCustom, sel, 0, name, 256);
+                    HKEY hKey; if (RegOpenKeyExW(HKEY_CURRENT_USER, REG_CUSTOM, 0, KEY_WRITE, &hKey) == ERROR_SUCCESS) { RegDeleteKeyW(hKey, name); RegCloseKey(hKey); }
                     LoadCustomCommands();
                 }
             } else if (wmId == 102) { // Browse
-                OPENFILENAMEW ofn = { sizeof(ofn) };
-                WCHAR szFile[MAX_PATH] = { 0 };
-                ofn.hwndOwner = hwnd;
-                ofn.lpstrFile = szFile;
-                ofn.nMaxFile = MAX_PATH;
+                OPENFILENAMEW ofn = { sizeof(ofn) }; WCHAR szFile[MAX_PATH] = { 0 };
+                ofn.hwndOwner = hwnd; ofn.lpstrFile = szFile; ofn.nMaxFile = MAX_PATH;
                 ofn.lpstrFilter = L"Executables (*.exe)\0*.exe\0All Files (*.*)\0*.*\0";
                 ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
                 if (GetOpenFileNameW(&ofn)) {
                     SetWindowTextW(g_hEditPath, szFile);
-                    WCHAR* pName = wcsrchr(szFile, L'\\');
-                    if (pName) pName++; else pName = szFile;
-                    std::wstring name = pName;
-                    size_t pos = name.find_last_of(L".");
+                    WCHAR* pName = wcsrchr(szFile, L'\\'); if (pName) pName++; else pName = szFile;
+                    std::wstring name = pName; size_t pos = name.find_last_of(L".");
                     if (pos != std::wstring::npos) name = name.substr(0, pos);
                     SetWindowTextW(g_hEditName, name.c_str());
                 }
@@ -337,7 +313,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         LPNMHDR nmhdr = (LPNMHDR)lParam;
         if (nmhdr->code == TCN_SELCHANGE) {
             UpdateTabVisibility();
-            InvalidateRect(g_hTab, NULL, TRUE);
+            InvalidateRect(hwnd, NULL, TRUE);
         }
         return 0;
     }
@@ -359,7 +335,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     HICON hIcon = (HICON)LoadImage(hInstance, MAKEINTRESOURCE(IDI_ICON1), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
     WNDCLASSEXW wc = { sizeof(WNDCLASSEX), CS_HREDRAW | CS_VREDRAW, WindowProc, 0, 0, hInstance, hIcon, LoadCursor(NULL, IDC_ARROW), g_hbrBackground, NULL, CLASS_NAME, hIcon };
     RegisterClassExW(&wc);
-    HWND hwnd = CreateWindowExW(0, CLASS_NAME, L"xToolsMenu Settings", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, CW_USEDEFAULT, CW_USEDEFAULT, 420, 620, NULL, NULL, hInstance, NULL);
+    HWND hwnd = CreateWindowExW(0, CLASS_NAME, L"xToolsMenu Settings", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, CW_USEDEFAULT, CW_USEDEFAULT, 420, 660, NULL, NULL, hInstance, NULL);
     if (!hwnd) return 0;
     BOOL useDarkMode = TRUE;
     DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDarkMode, sizeof(useDarkMode));

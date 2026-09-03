@@ -55,16 +55,10 @@ inline void DrawDarkTab(HWND hTab, LPDRAWITEMSTRUCT lpDrawItem) {
     FillRect(hdc, &rect, hbr);
     DeleteObject(hbr);
 
-    // Border
+    // Border (simplified)
     HPEN hPen = CreatePen(PS_SOLID, 1, DARK_BORDER);
     HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
-    MoveToEx(hdc, rect.left, rect.top, NULL);
-    LineTo(hdc, rect.right, rect.top);
-    LineTo(hdc, rect.right, rect.bottom);
-    if (!bSelected) {
-        LineTo(hdc, rect.left, rect.bottom);
-    }
-    LineTo(hdc, rect.left, rect.top);
+    Rectangle(hdc, rect.left, rect.top, rect.right, rect.bottom);
     SelectObject(hdc, hOldPen);
     DeleteObject(hPen);
 
