@@ -3,10 +3,12 @@
 #include <shlobj.h>
 #include <vector>
 #include <sddl.h>
+#include <appmodel.h>
 
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "shell32.lib")
 #pragma comment(lib, "advapi32.lib")
+#pragma comment(lib, "kernel32.lib")
 
 extern HINSTANCE g_hInst;
 HINSTANCE g_hInst = nullptr;
@@ -29,6 +31,18 @@ static HRESULT ResolveRelativeIconPath(PCWSTR pszRelativePath, LPWSTR* ppszIcon)
     if (wcschr(pszRelativePath, L':') || wcschr(pszRelativePath, L','))
     {
         return SHStrDupW(pszRelativePath, ppszIcon);
+    }
+
+    // For a packaged app (Sparse Package), the Windows Shell prefers ms-appx:/// URIs for assets.
+    UINT32 length = 0;
+    if (GetCurrentPackageFullName(&length, NULL) == ERROR_INSUFFICIENT_BUFFER)
+    {
+        std::wstring uri = L"ms-appx:///";
+        std::wstring relPath = pszRelativePath;
+        // Replace backslashes with forward slashes for URI compatibility
+        for (auto& ch : relPath) if (ch == L'\\') ch = L'/';
+        uri += relPath;
+        return SHStrDupW(uri.c_str(), ppszIcon);
     }
 
     WCHAR szPath[MAX_PATH];

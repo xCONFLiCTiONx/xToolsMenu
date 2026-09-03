@@ -10,10 +10,13 @@ $StageDir = Join-Path $Root "AppPackage"
 # 1. Create Staging Directory
 if (!(Test-Path $StageDir)) { New-Item -ItemType Directory -Path $StageDir | Out-Null }
 
-# 2. Copy Manifest and Assets to Staging
+# 2. Copy Manifest, Assets, and Icons to Staging
 Copy-Item (Join-Path $Root "AppxManifest.xml") $StageDir -Force
 if (Test-Path (Join-Path $Root "Assets")) {
     Copy-Item (Join-Path $Root "Assets") $StageDir -Recurse -Force
+}
+if (Test-Path (Join-Path $Root "Icons")) {
+    Copy-Item (Join-Path $Root "Icons") $StageDir -Recurse -Force
 }
 
 # 3. Copy Compiled Binaries
