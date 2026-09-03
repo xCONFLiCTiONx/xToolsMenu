@@ -192,7 +192,9 @@ IFACEMETHODIMP XToolsSubCommand::GetState(IShellItemArray* psiItemArray, BOOL, E
             else
             {
                 // For File selection, hide these
-                if (_action == XToolsAction::PasteToFile)
+                if (_action == XToolsAction::Terminal ||
+                    _action == XToolsAction::SystemFolders ||
+                    _action == XToolsAction::PasteToFile)
                 {
                     *pCmdState = ECS_HIDDEN;
                 }
