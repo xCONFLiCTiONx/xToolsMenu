@@ -182,8 +182,7 @@ IFACEMETHODIMP XToolsSubCommand::GetState(IShellItemArray* psiItemArray, BOOL, E
             if (isFolder)
             {
                 // For Directory selection, hide these
-                if (_action == XToolsAction::Terminal ||
-                    _action == XToolsAction::SystemFolders ||
+                if (_action == XToolsAction::SystemFolders ||
                     _action == XToolsAction::PasteToFile ||
                     _action == XToolsAction::EditWith)
                 {
