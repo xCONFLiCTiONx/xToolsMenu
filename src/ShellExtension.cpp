@@ -204,8 +204,15 @@ static bool RunElevatedCommand(const std::wstring& parameters)
 // Main function to take ownership and grant access
 static bool TakeOwnershipRecursive(const std::wstring& targetPath)
 {
+    wchar_t domain[256] = { 0 };
+    wchar_t user[256] = { 0 };
+    GetEnvironmentVariableW(L"USERDOMAIN", domain, 256);
+    GetEnvironmentVariableW(L"USERNAME", user, 256);
+    std::wstring currentUser = std::wstring(domain) + L"\\" + user;
+
     // Combine both commands into one elevated cmd.exe call to minimize UAC prompts
-    std::wstring parameters = L"/c takeown.exe /f \"" + targetPath + L"\" /r /d y & icacls.exe \"" + targetPath + L"\" /grant Administrators:F /t /c /q";
+    // We grant Full Control to both Administrators and the current user specifically
+    std::wstring parameters = L"/c takeown.exe /f \"" + targetPath + L"\" /r /d y & icacls.exe \"" + targetPath + L"\" /grant Administrators:F /grant \"" + currentUser + L":(OI)(CI)F\" /t /c /q";
 
     return RunElevatedCommand(parameters);
 }
