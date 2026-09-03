@@ -265,15 +265,64 @@ static bool TakeOwnershipRecursive(const std::wstring& targetPath)
     return RunElevatedCommand(parameters);
 }
 
+static void ReplaceAll(std::wstring& str, const std::wstring& from, const std::wstring& to) {
+    size_t start_pos = 0;
+    while ((start_pos = str.find(from, start_pos)) != std::wstring::npos) {
+        str.replace(start_pos, from.length(), to);
+        start_pos += to.length();
+    }
+}
+
+static std::vector<std::wstring> GetTargetPaths(IShellItemArray* psiItemArray, IUnknown* pUnkSite) {
+    std::vector<std::wstring> paths;
+    if (psiItemArray) {
+        DWORD count = 0;
+        psiItemArray->GetCount(&count);
+        for (DWORD i = 0; i < count; i++) {
+            ComPtr<IShellItem> item;
+            if (SUCCEEDED(psiItemArray->GetItemAt(i, &item))) {
+                LPWSTR path = nullptr;
+                if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path))) {
+                    paths.push_back(path);
+                    CoTaskMemFree(path);
+                }
+            }
+        }
+    }
+    if (paths.empty() && pUnkSite) {
+        ComPtr<IServiceProvider> sp;
+        if (SUCCEEDED(pUnkSite->QueryInterface(IID_PPV_ARGS(&sp)))) {
+            ComPtr<IShellBrowser> sb;
+            if (SUCCEEDED(sp->QueryService(SID_SShellBrowser, IID_PPV_ARGS(&sb)))) {
+                ComPtr<IShellView> sv;
+                if (SUCCEEDED(sb->QueryActiveShellView(&sv))) {
+                    ComPtr<IFolderView> fv;
+                    if (SUCCEEDED(sv->QueryInterface(IID_PPV_ARGS(&fv)))) {
+                        ComPtr<IShellItem> item;
+                        if (SUCCEEDED(fv->GetFolder(IID_PPV_ARGS(&item)))) {
+                            LPWSTR path = nullptr;
+                            if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path))) {
+                                paths.push_back(path);
+                                CoTaskMemFree(path);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return paths;
+}
+
 IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiItemArray, IBindCtx*)
 {
     if (_action == XToolsAction::OpenExe || _action == XToolsAction::EditWith || _action == XToolsAction::SystemFolders || _action == XToolsAction::Settings || _action == XToolsAction::Custom)
     {
-        std::wstring exePath, params;
+        std::wstring exePath, baseArgs;
         if (_action == XToolsAction::Custom)
         {
-            exePath = _icon; // For custom entries, icon field stores the path
-            params = _data;
+            exePath = _icon; // Icon stores exe path for custom entries
+            baseArgs = _data;
         }
         else
         {
@@ -288,26 +337,29 @@ IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiItemArray, IBindCtx*
             exePath = szModule;
         }
 
-        if (psiItemArray)
+        std::vector<std::wstring> paths = GetTargetPaths(psiItemArray, _spUnkSite.Get());
+
+        if (baseArgs.find(L"%1") != std::wstring::npos)
         {
-            DWORD count = 0;
-            psiItemArray->GetCount(&count);
-            for (DWORD i = 0; i < count; i++)
+            // Execute for each path
+            for (const auto& path : paths)
             {
-                ComPtr<IShellItem> item;
-                if (SUCCEEDED(psiItemArray->GetItemAt(i, &item)))
-                {
-                    LPWSTR path = nullptr;
-                    if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path)))
-                    {
-                        if (!params.empty()) params += L" ";
-                        params += L"\""; params += path; params += L"\"";
-                        CoTaskMemFree(path);
-                    }
-                }
+                std::wstring args = baseArgs;
+                ReplaceAll(args, L"%1", path);
+                ShellExecuteW(NULL, L"open", exePath.c_str(), args.c_str(), NULL, SW_SHOWNORMAL);
             }
         }
-        ShellExecuteW(NULL, L"open", exePath.c_str(), params.empty() ? NULL : params.c_str(), NULL, SW_SHOWNORMAL);
+        else
+        {
+            // Append all paths to one command
+            std::wstring fullArgs = baseArgs;
+            for (const auto& path : paths)
+            {
+                if (!fullArgs.empty()) fullArgs += L" ";
+                fullArgs += L"\""; fullArgs += path; fullArgs += L"\"";
+            }
+            ShellExecuteW(NULL, L"open", exePath.c_str(), fullArgs.empty() ? NULL : fullArgs.c_str(), NULL, SW_SHOWNORMAL);
+        }
     }
     else if (_action == XToolsAction::Terminal || _action == XToolsAction::TerminalAdmin)
     {
