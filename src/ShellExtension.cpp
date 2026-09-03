@@ -147,60 +147,95 @@ IFACEMETHODIMP XToolsSubCommand::GetCanonicalName(GUID* pguidCommandName)
     return E_NOTIMPL;
 }
 
+static bool IsFeatureEnabled(XToolsAction action, bool isFolder, bool isBackground)
+{
+    if (action == XToolsAction::Settings) return true;
+
+    const wchar_t* REG_PATH = L"Software\\xToolsMenu\\Settings";
+    std::wstring prefix;
+    if (isBackground) prefix = L"Background_";
+    else if (isFolder) prefix = L"Directory_";
+    else prefix = L"Files_";
+
+    std::wstring name;
+    switch (action)
+    {
+    case XToolsAction::OpenExe: name = L"Attributes"; break;
+    case XToolsAction::Terminal: name = L"Terminal"; break;
+    case XToolsAction::TerminalAdmin: name = L"TerminalAdmin"; break;
+    case XToolsAction::EditWith: name = L"EditWith"; break;
+    case XToolsAction::SystemFolders: name = L"SystemFolders"; break;
+    case XToolsAction::PasteToFile: name = L"PasteToFile"; break;
+    case XToolsAction::CopyName: name = L"CopyName"; break;
+    case XToolsAction::CopyPath: name = L"CopyPath"; break;
+    case XToolsAction::TakeOwnership: name = L"TakeOwnership"; break;
+    default: return true;
+    }
+
+    std::wstring valueName = prefix + name;
+    DWORD value = 1; // Default to enabled
+    DWORD size = sizeof(value);
+    RegGetValueW(HKEY_CURRENT_USER, REG_PATH, valueName.c_str(), RRF_RT_REG_DWORD, NULL, &value, &size);
+
+    return value != 0;
+}
+
 IFACEMETHODIMP XToolsSubCommand::GetState(IShellItemArray* psiItemArray, BOOL, EXPCMDSTATE* pCmdState)
 {
     *pCmdState = ECS_ENABLED;
+    bool isFolder = false;
+    bool isBackground = false;
 
     if (!psiItemArray)
     {
-        if (_action == XToolsAction::CopyName || _action == XToolsAction::CopyPath || _action == XToolsAction::EditWith)
+        isBackground = true;
+        if (_action == XToolsAction::CopyName || _action == XToolsAction::CopyPath || _action == XToolsAction::EditWith || _action == XToolsAction::TakeOwnership)
         {
             *pCmdState = ECS_HIDDEN;
+            return S_OK;
         }
-        return S_OK;
     }
-
-    DWORD count = 0;
-    psiItemArray->GetCount(&count);
-    if (count == 0)
+    else
     {
-        if (_action == XToolsAction::CopyName || _action == XToolsAction::CopyPath || _action == XToolsAction::EditWith)
+        DWORD count = 0;
+        psiItemArray->GetCount(&count);
+        if (count == 0)
         {
-            *pCmdState = ECS_HIDDEN;
+            isBackground = true;
         }
-        return S_OK;
-    }
-
-    ComPtr<IShellItem> item;
-    if (SUCCEEDED(psiItemArray->GetItemAt(0, &item)))
-    {
-        SFGAOF attributes;
-        if (SUCCEEDED(item->GetAttributes(SFGAO_FOLDER, &attributes)))
+        else
         {
-            bool isFolder = (attributes & SFGAO_FOLDER);
-
-            if (isFolder)
+            ComPtr<IShellItem> item;
+            if (SUCCEEDED(psiItemArray->GetItemAt(0, &item)))
             {
-                // For Directory selection, hide these
-                if (_action == XToolsAction::SystemFolders ||
-                    _action == XToolsAction::PasteToFile ||
-                    _action == XToolsAction::EditWith)
+                SFGAOF attributes;
+                if (SUCCEEDED(item->GetAttributes(SFGAO_FOLDER, &attributes)))
                 {
-                    *pCmdState = ECS_HIDDEN;
-                }
-            }
-            else
-            {
-                // For File selection, hide these
-                if (_action == XToolsAction::Terminal ||
-                    _action == XToolsAction::TerminalAdmin ||
-                    _action == XToolsAction::SystemFolders ||
-                    _action == XToolsAction::PasteToFile)
-                {
-                    *pCmdState = ECS_HIDDEN;
+                    isFolder = (attributes & SFGAO_FOLDER);
+                    if (isFolder)
+                    {
+                        if (_action == XToolsAction::SystemFolders || _action == XToolsAction::PasteToFile || _action == XToolsAction::EditWith)
+                        {
+                            *pCmdState = ECS_HIDDEN;
+                            return S_OK;
+                        }
+                    }
+                    else
+                    {
+                        if (_action == XToolsAction::Terminal || _action == XToolsAction::TerminalAdmin || _action == XToolsAction::SystemFolders || _action == XToolsAction::PasteToFile)
+                        {
+                            *pCmdState = ECS_HIDDEN;
+                            return S_OK;
+                        }
+                    }
                 }
             }
         }
+    }
+
+    if (!IsFeatureEnabled(_action, isFolder, isBackground))
+    {
+        *pCmdState = ECS_HIDDEN;
     }
 
     return S_OK;
@@ -274,7 +309,7 @@ static bool TakeOwnershipRecursive(const std::wstring& targetPath)
 
 IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiItemArray, IBindCtx*)
 {
-    if (_action == XToolsAction::OpenExe || _action == XToolsAction::EditWith || _action == XToolsAction::SystemFolders)
+    if (_action == XToolsAction::OpenExe || _action == XToolsAction::EditWith || _action == XToolsAction::SystemFolders || _action == XToolsAction::Settings)
     {
         WCHAR szModule[MAX_PATH];
         GetModuleFileNameW(g_hInst, szModule, ARRAYSIZE(szModule));
@@ -283,6 +318,7 @@ IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiItemArray, IBindCtx*
         std::wstring exeName = _data;
         if (_action == XToolsAction::EditWith) exeName = L"EditWithDialog.exe";
         else if (_action == XToolsAction::SystemFolders) exeName = L"SystemFoldersDialog.exe";
+        else if (_action == XToolsAction::Settings) exeName = L"Settings.exe";
 
         PathAppendW(szModule, exeName.c_str());
 
@@ -541,6 +577,9 @@ HRESULT XToolsCommandEnumerator::RuntimeClassInitialize()
         _commands.push_back(cmd);
 
     if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Take Ownership", XToolsAction::TakeOwnership, L"C:\\Windows\\System32\\imageres.dll,-78")))
+        _commands.push_back(cmd);
+
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Settings", XToolsAction::Settings, L"C:\\Windows\\System32\\shell32.dll,-22")))
         _commands.push_back(cmd);
 
     return S_OK;

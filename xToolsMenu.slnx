@@ -8,6 +8,7 @@
     <File Path="src/AttributesDialog.cpp" />
     <File Path="src/ShellExtension.cpp" />
     <File Path="src/ShellExtension.h" />
+    <File Path="src/SettingsDialog.cpp" />
   </Folder>
   <Project Path="xToolsMenu/xToolsMenu.vcxproj" Id="12345678-abcd-efab-cdef-123456789abc" />
 </Solution>
