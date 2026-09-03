@@ -151,29 +151,41 @@ IFACEMETHODIMP XToolsSubCommand::GetState(IShellItemArray* psiItemArray, BOOL, E
 {
     *pCmdState = ECS_ENABLED;
 
-    if (psiItemArray)
+    if (!psiItemArray)
     {
-        DWORD count = 0;
-        psiItemArray->GetCount(&count);
-        if (count > 0)
+        if (_action == XToolsAction::CopyName || _action == XToolsAction::CopyPath)
         {
-            ComPtr<IShellItem> item;
-            if (SUCCEEDED(psiItemArray->GetItemAt(0, &item)))
-            {
-                SFGAOF attributes;
-                if (SUCCEEDED(item->GetAttributes(SFGAO_FOLDER, &attributes)))
-                {
-                    bool isFolder = (attributes & SFGAO_FOLDER);
+            *pCmdState = ECS_HIDDEN;
+        }
+        return S_OK;
+    }
 
-                    if (_action == XToolsAction::EditWith && isFolder)
-                    {
-                        *pCmdState = ECS_HIDDEN;
-                    }
-                    else if (_action == XToolsAction::PasteToFile && !isFolder)
-                    {
-                        *pCmdState = ECS_HIDDEN;
-                    }
-                }
+    DWORD count = 0;
+    psiItemArray->GetCount(&count);
+    if (count == 0)
+    {
+        if (_action == XToolsAction::CopyName || _action == XToolsAction::CopyPath)
+        {
+            *pCmdState = ECS_HIDDEN;
+        }
+        return S_OK;
+    }
+
+    ComPtr<IShellItem> item;
+    if (SUCCEEDED(psiItemArray->GetItemAt(0, &item)))
+    {
+        SFGAOF attributes;
+        if (SUCCEEDED(item->GetAttributes(SFGAO_FOLDER, &attributes)))
+        {
+            bool isFolder = (attributes & SFGAO_FOLDER);
+
+            if (_action == XToolsAction::EditWith && isFolder)
+            {
+                *pCmdState = ECS_HIDDEN;
+            }
+            else if (_action == XToolsAction::PasteToFile && !isFolder)
+            {
+                *pCmdState = ECS_HIDDEN;
             }
         }
     }
