@@ -2,9 +2,11 @@
 #include <shlwapi.h>
 #include <shlobj.h>
 #include <vector>
+#include <sddl.h>
 
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "shell32.lib")
+#pragma comment(lib, "advapi32.lib")
 
 extern HINSTANCE g_hInst;
 HINSTANCE g_hInst = nullptr;
@@ -201,18 +203,46 @@ static bool RunElevatedCommand(const std::wstring& parameters)
     return false;
 }
 
+// Helper function to get current user's SID as a string
+static std::wstring GetCurrentUserSidString()
+{
+    std::wstring sidString;
+    HANDLE hToken = NULL;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken))
+    {
+        DWORD dwSize = 0;
+        GetTokenInformation(hToken, TokenUser, NULL, 0, &dwSize);
+        if (GetLastError() == ERROR_INSUFFICIENT_BUFFER)
+        {
+            std::vector<BYTE> buffer(dwSize);
+            if (GetTokenInformation(hToken, TokenUser, buffer.data(), dwSize, &dwSize))
+            {
+                PTOKEN_USER pTokenUser = reinterpret_cast<PTOKEN_USER>(buffer.data());
+                LPWSTR pSid = NULL;
+                if (ConvertSidToStringSidW(pTokenUser->User.Sid, &pSid))
+                {
+                    sidString = pSid;
+                    LocalFree(pSid);
+                }
+            }
+        }
+        CloseHandle(hToken);
+    }
+    return sidString;
+}
+
 // Main function to take ownership and grant access
 static bool TakeOwnershipRecursive(const std::wstring& targetPath)
 {
-    wchar_t domain[256] = { 0 };
-    wchar_t user[256] = { 0 };
-    GetEnvironmentVariableW(L"USERDOMAIN", domain, 256);
-    GetEnvironmentVariableW(L"USERNAME", user, 256);
-    std::wstring currentUser = std::wstring(domain) + L"\\" + user;
+    std::wstring sid = GetCurrentUserSidString();
+    if (sid.empty()) return false;
 
-    // Combine both commands into one elevated cmd.exe call to minimize UAC prompts
-    // We grant Full Control to both Administrators and the current user specifically
-    std::wstring parameters = L"/c takeown.exe /f \"" + targetPath + L"\" /r /d y & icacls.exe \"" + targetPath + L"\" /grant Administrators:F /grant \"" + currentUser + L":(OI)(CI)F\" /t /c /q";
+    // 1. Take recursive ownership: takeown /f ... /r /d y
+    // 2. Grant Full Control to Administrators and the specific user SID at the root with inheritance (OI)(CI)
+    // 3. Recursively enable inheritance on children to fix broken permissions without adding redundant explicit ACEs
+    std::wstring parameters = L"/c takeown.exe /f \"" + targetPath + L"\" /r /d y "
+        L"& icacls.exe \"" + targetPath + L"\" /grant Administrators:F /grant *\"" + sid + L"\":(OI)(CI)F "
+        L"& icacls.exe \"" + targetPath + L"\" /inheritance:e /t /c /q";
 
     return RunElevatedCommand(parameters);
 }
