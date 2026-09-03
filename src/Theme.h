@@ -1,5 +1,6 @@
 #pragma once
 #include <windows.h>
+#include <commctrl.h>
 
 const COLORREF DARK_BACKGROUND = RGB(32, 32, 32);
 const COLORREF DARK_CONTROL_BACK = RGB(45, 45, 45);
@@ -55,7 +56,7 @@ inline void DrawDarkTab(HWND hTab, LPDRAWITEMSTRUCT lpDrawItem) {
     FillRect(hdc, &rect, hbr);
     DeleteObject(hbr);
 
-    // Border (simplified)
+    // Border
     HPEN hPen = CreatePen(PS_SOLID, 1, DARK_BORDER);
     HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
     Rectangle(hdc, rect.left, rect.top, rect.right, rect.bottom);
