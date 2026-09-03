@@ -263,6 +263,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 }
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
+    // MANDATORY: Must be the absolute first line to override Shell identity
+    SetCurrentProcessExplicitAppUserModelID(L"xToolsMenu.App");
+
     INITCOMMONCONTROLSEX icex;
     icex.dwSize = sizeof(icex);
     icex.dwICC = ICC_DATE_CLASSES;
