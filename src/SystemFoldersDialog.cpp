@@ -30,7 +30,7 @@ std::vector<FolderInfo> g_folders = {
     { L"Start Menu (User)", CSIDL_STARTMENU, L"" },
     { L"Start Menu (All Users)", CSIDL_COMMON_STARTMENU, L"" },
     { L"Temp Folder", -1, L"" }, // Special case for TEMP
-    { L"AppData (Roaming)", CSIDL_APPDATA, L"" },
+    { L"AppData (Local)", CSIDL_LOCAL_APPDATA, L"" },
     { L"ProgramData", CSIDL_COMMON_APPDATA, L"" }
 };
 
