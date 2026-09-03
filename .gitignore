@@ -441,3 +441,4 @@ Register.bat
 register.ps1
 Reinstall.bat
 unregister.bat
+create_cert.ps1
