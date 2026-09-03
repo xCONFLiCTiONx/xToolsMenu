@@ -13,6 +13,7 @@ for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio
 
 if "%VS_PATH%"=="" (
     echo Visual Studio MSBuild not found!
+    pause
     exit /b 1
 )
 
@@ -23,6 +24,7 @@ call "%VS_PATH%\Common7\Tools\VsDevCmd.bat" -arch=x64 -no_logo
 if not exist "xToolsMenu.slnx" (
     echo Error: xToolsMenu.slnx not found!
     dir /b
+    pause
     exit /b 1
 )
 
@@ -58,5 +60,5 @@ if exist "src\SystemFoldersDialog.cpp" (
     cl /nologo /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\SystemFoldersDialog.exe src\SystemFoldersDialog.cpp src\app.res /link /SUBSYSTEM:WINDOWS user32.lib dwmapi.lib advapi32.lib shell32.lib comctl32.lib
 )
 
-echo Build complete!
+pause
 endlocal

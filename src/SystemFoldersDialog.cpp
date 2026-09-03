@@ -2,6 +2,7 @@
 #include <dwmapi.h>
 #include <shlobj.h>
 #include <shlwapi.h>
+#include <shobjidl.h>
 #include <string>
 #include <vector>
 #include "resource.h"
@@ -103,22 +104,31 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 }
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
+    SetCurrentProcessExplicitAppUserModelID(L"xToolsMenu.App");
     g_hbrBackground = CreateSolidBrush(DARK_BACKGROUND);
 
     const wchar_t CLASS_NAME[] = L"SystemFoldersDialogClass";
-    WNDCLASSW wc = { 0 };
+    HICON hIcon = (HICON)LoadImage(hInstance, MAKEINTRESOURCE(IDI_ICON1), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
+
+    WNDCLASSEXW wc = { 0 };
+    wc.cbSize = sizeof(WNDCLASSEX);
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = hInstance;
     wc.lpszClassName = CLASS_NAME;
     wc.hbrBackground = g_hbrBackground;
-    wc.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_ICON1));
+    wc.hIcon = hIcon;
+    wc.hIconSm = hIcon;
 
-    RegisterClassW(&wc);
+    RegisterClassExW(&wc);
 
     HWND hwnd = CreateWindowExW(0, CLASS_NAME, L"System Folders", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
         CW_USEDEFAULT, CW_USEDEFAULT, 315, 300, NULL, NULL, hInstance, NULL);
 
     if (hwnd == NULL) return 0;
+
+    // Explicitly set icons to ensure taskbar picks them up
+    SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
+    SendMessage(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
 
     BOOL useDarkMode = TRUE;
     DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &useDarkMode, sizeof(useDarkMode));
