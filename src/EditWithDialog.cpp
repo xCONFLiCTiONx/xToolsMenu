@@ -15,6 +15,7 @@
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "gdi32.lib")
 #pragma comment(lib, "advapi32.lib")
+#pragma comment(lib, "ole32.lib")
 
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
@@ -31,39 +32,77 @@ struct EditorInfo {
 std::vector<EditorInfo> g_editors;
 std::vector<std::wstring> g_filesToOpen;
 
-void FindEditors() {
-    // 1. Notepad (System)
-    WCHAR szNotepad[MAX_PATH];
-    GetSystemDirectoryW(szNotepad, MAX_PATH);
-    PathAppendW(szNotepad, L"notepad.exe");
-    g_editors.push_back({ L"Notepad", szNotepad });
+void AddEditor(const std::wstring& name, const std::wstring& path) {
+    if (path.empty() || !PathFileExistsW(path.c_str())) return;
 
-    // 2. Notepad++
-    auto CheckPath = [](const wchar_t* name, const wchar_t* relativePath) {
-        WCHAR szPath[MAX_PATH];
-        ExpandEnvironmentStringsW(relativePath, szPath, MAX_PATH);
-        if (PathFileExistsW(szPath)) {
-            g_editors.push_back({ name, szPath });
+    // Deduplicate by path
+    for (const auto& e : g_editors) {
+        if (_wcsicmp(e.path.c_str(), path.c_str()) == 0) return;
+    }
+    g_editors.push_back({ name, path });
+}
+
+void FindEditors() {
+    g_editors.clear();
+
+    std::wstring ext = L".txt";
+    if (!g_filesToOpen.empty()) {
+        ext = PathFindExtensionW(g_filesToOpen[0].c_str());
+        if (ext.empty()) ext = L".txt";
+    }
+
+    auto ScanHandlers = [&](const wchar_t* extension) {
+        IEnumAssocHandlers* pEnum = nullptr;
+        if (SUCCEEDED(SHAssocEnumHandlers(extension, ASSOC_FILTER_RECOMMENDED, &pEnum))) {
+            IAssocHandler* pHandler = nullptr;
+            ULONG fetched = 0;
+            while (pEnum->Next(1, &pHandler, &fetched) == S_OK && fetched == 1) {
+                LPWSTR name = nullptr;
+                LPWSTR path = nullptr;
+                if (SUCCEEDED(pHandler->GetUIName(&name))) {
+                    if (SUCCEEDED(pHandler->GetName(&path))) {
+                        if (PathFileExistsW(path)) {
+                            AddEditor(name, path);
+                        } else {
+                            WCHAR szPath[MAX_PATH];
+                            DWORD dwSize = MAX_PATH;
+                            if (SUCCEEDED(AssocQueryStringW(ASSOCF_INIT_BYEXENAME, ASSOCSTR_EXECUTABLE, path, NULL, szPath, &dwSize))) {
+                                AddEditor(name, szPath);
+                            }
+                        }
+                        CoTaskMemFree(path);
+                    }
+                    CoTaskMemFree(name);
+                }
+                pHandler->Release();
+            }
+            pEnum->Release();
         }
     };
 
-    CheckPath(L"Notepad++", L"%ProgramFiles%\\Notepad++\\notepad++.exe");
-    CheckPath(L"Notepad++ (x86)", L"%ProgramFiles(x86)%\\Notepad++\\notepad++.exe");
+    ScanHandlers(ext.c_str());
+    if (ext != L".txt") ScanHandlers(L".txt");
 
-    // 3. VS Code
-    CheckPath(L"VS Code", L"%LocalAppData%\\Programs\\Microsoft VS Code\\Code.exe");
-    CheckPath(L"VS Code (System)", L"%ProgramFiles%\\Microsoft VS Code\\Code.exe");
+    // Common editors lookup via App Paths
+    const std::pair<std::wstring, std::wstring> common[] = {
+        { L"VS Code", L"code.exe" },
+        { L"Notepad++", L"notepad++.exe" },
+        { L"Sublime Text", L"sublime_text.exe" }
+    };
 
-    // 4. Sublime Text
-    CheckPath(L"Sublime Text", L"%ProgramFiles%\\Sublime Text\\sublime_text.exe");
-    CheckPath(L"Sublime Text 3", L"%ProgramFiles%\\Sublime Text 3\\sublime_text.exe");
-
-    // 5. Try to find more from Registry (OpenWithList for .txt)
-    HKEY hKey;
-    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\.txt\\OpenWithList", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
-        // This is a simplified search, usually you'd want to look in OpenWithProgids too
-        RegCloseKey(hKey);
+    for (const auto& c : common) {
+        WCHAR szPath[MAX_PATH];
+        DWORD dwSize = MAX_PATH;
+        if (SUCCEEDED(AssocQueryStringW(ASSOCF_INIT_BYEXENAME, ASSOCSTR_EXECUTABLE, c.second.c_str(), NULL, szPath, &dwSize))) {
+            AddEditor(c.first, szPath);
+        }
     }
+
+    // Fallbacks
+    WCHAR szNotepad[MAX_PATH];
+    GetSystemDirectoryW(szNotepad, MAX_PATH);
+    PathAppendW(szNotepad, L"notepad.exe");
+    AddEditor(L"Notepad", szNotepad);
 }
 
 void OpenWithEditor(int index) {
@@ -104,35 +143,17 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         g_hFont = CreateFontW(logHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
 
         int y = 15;
-        for (int i = 0; i < g_editors.size(); i++) {
+        for (int i = 0; i < (int)g_editors.size(); i++) {
             HWND hBtn = CreateWindowW(L"BUTTON", g_editors[i].name.c_str(), WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON | BS_OWNERDRAW, 20, y, 260, 35, hwnd, (HMENU)(UINT_PTR)i, hInst, NULL);
             SendMessage(hBtn, WM_SETFONT, (WPARAM)g_hFont, TRUE);
             y += 45;
         }
 
-        // Add a "Browse..." button
-        HWND hBrowse = CreateWindowW(L"BUTTON", L"Browse for editor...", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON | BS_OWNERDRAW, 20, y, 260, 35, hwnd, (HMENU)999, hInst, NULL);
-        SendMessage(hBrowse, WM_SETFONT, (WPARAM)g_hFont, TRUE);
-
         return 0;
     }
     case WM_COMMAND: {
         int id = LOWORD(wParam);
-        if (id == 999) {
-            WCHAR szFile[MAX_PATH] = { 0 };
-            OPENFILENAMEW ofn = { 0 };
-            ofn.lStructSize = sizeof(ofn);
-            ofn.hwndOwner = hwnd;
-            ofn.lpstrFilter = L"Executables (*.exe)\0*.exe\0All Files (*.*)\0*.*\0";
-            ofn.lpstrFile = szFile;
-            ofn.nMaxFile = MAX_PATH;
-            ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
-            if (GetOpenFileNameW(&ofn)) {
-                g_editors.push_back({ L"Custom", szFile });
-                OpenWithEditor(g_editors.size() - 1);
-                PostQuitMessage(0);
-            }
-        } else if (id >= 0 && id < g_editors.size()) {
+        if (id >= 0 && id < (int)g_editors.size()) {
             OpenWithEditor(id);
             PostQuitMessage(0);
         }
@@ -175,7 +196,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
 
     RegisterClassExW(&wc);
 
-    int height = (g_editors.size() + 2) * 45 + 20;
+    int height = (int)g_editors.size() * 45 + 65;
     HWND hwnd = CreateWindowExW(0, CLASS_NAME, L"Edit With", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
         CW_USEDEFAULT, CW_USEDEFAULT, 315, height, NULL, NULL, hInstance, NULL);
 
