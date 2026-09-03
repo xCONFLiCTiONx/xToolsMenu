@@ -13,6 +13,7 @@ enum class XToolsAction {
     MakeHidden,
     MakeSuperHidden,
     Terminal,
+    TerminalAdmin,
     EditWith,
     SystemFolders,
     CopyName,
@@ -43,7 +44,7 @@ private:
     ComPtr<IUnknown> _spUnkSite;
 };
 
-class XToolsSubCommand : public RuntimeClass<RuntimeClassFlags<ClassicCom>, IExplorerCommand>
+class XToolsSubCommand : public RuntimeClass<RuntimeClassFlags<ClassicCom>, IExplorerCommand, IObjectWithSite>
 {
 public:
     HRESULT RuntimeClassInitialize(PCWSTR title, XToolsAction action, PCWSTR icon = nullptr, PCWSTR data = nullptr) {
@@ -63,11 +64,16 @@ public:
     IFACEMETHODIMP GetFlags(_Out_ EXPCMDFLAGS* pFlags) override;
     IFACEMETHODIMP EnumSubCommands(_Outptr_ IEnumExplorerCommand** ppEnum) override;
 
+    // IObjectWithSite
+    IFACEMETHODIMP SetSite(_In_ IUnknown* pUnkSite) override;
+    IFACEMETHODIMP GetSite(_In_ REFIID riid, _Outptr_ void** ppvSite) override;
+
 private:
     std::wstring _title;
     XToolsAction _action;
     std::wstring _icon;
     std::wstring _data;
+    ComPtr<IUnknown> _spUnkSite;
 };
 
 class XToolsCommandEnumerator : public RuntimeClass<RuntimeClassFlags<ClassicCom>, IEnumExplorerCommand>

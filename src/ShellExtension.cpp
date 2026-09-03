@@ -193,6 +193,7 @@ IFACEMETHODIMP XToolsSubCommand::GetState(IShellItemArray* psiItemArray, BOOL, E
             {
                 // For File selection, hide these
                 if (_action == XToolsAction::Terminal ||
+                    _action == XToolsAction::TerminalAdmin ||
                     _action == XToolsAction::SystemFolders ||
                     _action == XToolsAction::PasteToFile)
                 {
@@ -309,29 +310,56 @@ IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiItemArray, IBindCtx*
 
         ShellExecuteW(NULL, L"open", szModule, params.empty() ? NULL : params.c_str(), NULL, SW_SHOWNORMAL);
     }
-    else if (_action == XToolsAction::Terminal)
+    else if (_action == XToolsAction::Terminal || _action == XToolsAction::TerminalAdmin)
     {
+        LPWSTR path = nullptr;
         if (psiItemArray)
         {
             ComPtr<IShellItem> item;
             if (SUCCEEDED(psiItemArray->GetItemAt(0, &item)))
             {
-                LPWSTR path = nullptr;
-                if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path)))
+                item->GetDisplayName(SIGDN_FILESYSPATH, &path);
+            }
+        }
+        else if (_spUnkSite)
+        {
+            // Background context - get path from site
+            ComPtr<IServiceProvider> sp;
+            if (SUCCEEDED(_spUnkSite.As(&sp)))
+            {
+                ComPtr<IShellBrowser> sb;
+                if (SUCCEEDED(sp->QueryService(SID_SShellBrowser, IID_PPV_ARGS(&sb))))
                 {
-                    WCHAR szDir[MAX_PATH];
-                    wcscpy_s(szDir, path);
-
-                    DWORD attrs = GetFileAttributesW(path);
-                    if (!(attrs & FILE_ATTRIBUTE_DIRECTORY))
+                    ComPtr<IShellView> sv;
+                    if (SUCCEEDED(sb->QueryActiveShellView(&sv)))
                     {
-                        PathRemoveFileSpecW(szDir);
+                        ComPtr<IFolderView> fv;
+                        if (SUCCEEDED(sv->QueryInterface(IID_PPV_ARGS(&fv))))
+                        {
+                            ComPtr<IShellItem> item;
+                            if (SUCCEEDED(fv->GetFolder(IID_PPV_ARGS(&item))))
+                            {
+                                item->GetDisplayName(SIGDN_FILESYSPATH, &path);
+                            }
+                        }
                     }
-
-                    ShellExecuteW(NULL, L"open", L"cmd.exe", NULL, szDir, SW_SHOWNORMAL);
-                    CoTaskMemFree(path);
                 }
             }
+        }
+
+        if (path)
+        {
+            WCHAR szDir[MAX_PATH];
+            wcscpy_s(szDir, path);
+
+            DWORD attrs = GetFileAttributesW(path);
+            if (!(attrs & FILE_ATTRIBUTE_DIRECTORY))
+            {
+                PathRemoveFileSpecW(szDir);
+            }
+
+            ShellExecuteW(NULL, _action == XToolsAction::TerminalAdmin ? L"runas" : L"open", L"cmd.exe", NULL, szDir, SW_SHOWNORMAL);
+            CoTaskMemFree(path);
         }
     }
     else if (_action == XToolsAction::CopyName || _action == XToolsAction::CopyPath)
@@ -469,6 +497,17 @@ IFACEMETHODIMP XToolsSubCommand::EnumSubCommands(IEnumExplorerCommand** ppEnum)
     return E_NOTIMPL;
 }
 
+IFACEMETHODIMP XToolsSubCommand::SetSite(IUnknown* pUnkSite)
+{
+    _spUnkSite = pUnkSite;
+    return S_OK;
+}
+
+IFACEMETHODIMP XToolsSubCommand::GetSite(REFIID riid, void** ppvSite)
+{
+    return _spUnkSite.CopyTo(riid, ppvSite);
+}
+
 // SubCommand Enumerator implementation
 HRESULT XToolsCommandEnumerator::RuntimeClassInitialize()
 {
@@ -479,6 +518,9 @@ HRESULT XToolsCommandEnumerator::RuntimeClassInitialize()
         _commands.push_back(cmd);
 
     if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Terminal", XToolsAction::Terminal, L"C:\\Windows\\System32\\imageres.dll,-5324")))
+        _commands.push_back(cmd);
+
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Terminal (admin)", XToolsAction::TerminalAdmin, L"C:\\Windows\\System32\\imageres.dll,-5324")))
         _commands.push_back(cmd);
 
     if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Edit with", XToolsAction::EditWith, L"C:\\Windows\\System32\\shell32.dll,-243")))
