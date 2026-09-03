@@ -432,3 +432,4 @@ FodyWeavers.xsd
 # Dev
 .idea
 *.exe
+AppPackage
