@@ -153,7 +153,7 @@ IFACEMETHODIMP XToolsSubCommand::GetState(IShellItemArray* psiItemArray, BOOL, E
 
     if (!psiItemArray)
     {
-        if (_action == XToolsAction::CopyName || _action == XToolsAction::CopyPath)
+        if (_action == XToolsAction::CopyName || _action == XToolsAction::CopyPath || _action == XToolsAction::EditWith)
         {
             *pCmdState = ECS_HIDDEN;
         }
@@ -164,7 +164,7 @@ IFACEMETHODIMP XToolsSubCommand::GetState(IShellItemArray* psiItemArray, BOOL, E
     psiItemArray->GetCount(&count);
     if (count == 0)
     {
-        if (_action == XToolsAction::CopyName || _action == XToolsAction::CopyPath)
+        if (_action == XToolsAction::CopyName || _action == XToolsAction::CopyPath || _action == XToolsAction::EditWith)
         {
             *pCmdState = ECS_HIDDEN;
         }

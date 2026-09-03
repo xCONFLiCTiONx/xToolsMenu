@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="ICON.png" width="128" alt="xToolsMenu Logo">
+</p>
+
 # xToolsMenu
 
 xToolsMenu is a Windows Shell Extension that adds a "Power User" context menu to Windows Explorer. It provides quick access to common administrative and development tasks directly from the right-click menu.
