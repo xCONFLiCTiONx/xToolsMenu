@@ -21,7 +21,7 @@ Compression=lzma
 SolidCompression=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-PrivilegesRequired=lowest
+PrivilegesRequired=admin
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -44,7 +44,7 @@ Filename: "{win}\explorer.exe"; Flags: nowait runasoriginaluser
 
 [UninstallRun]
 ; Unregister Sparse Package
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""$pkg = Get-AppxPackage -Name xToolsMenu.Extension; if ($pkg) {{ Remove-AppxPackage -Package $pkg.PackageFullName }}"""; Flags: runhidden; RunOnceId: "UnregisterAppx"
+Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""Get-AppxPackage -Name xToolsMenu.Extension | Remove-AppxPackage"""; Flags: runhidden; RunOnceId: "UnregisterAppx"
 ; Restart Explorer to apply changes
 Filename: "taskkill.exe"; Parameters: "/f /im explorer.exe"; Flags: runhidden; RunOnceId: "KillExplorerUninst"
 Filename: "{win}\explorer.exe"; Flags: nowait; RunOnceId: "StartExplorerUninst"
