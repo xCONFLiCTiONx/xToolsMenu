@@ -1,5 +1,6 @@
 #include "ShellExtension.h"
 #include "resource.h"
+#include "Theme.h"
 #include <shlwapi.h>
 #include <shlobj.h>
 #include <vector>
@@ -34,32 +35,41 @@ static HRESULT ResolveRelativeIconPath(PCWSTR pszRelativePath, LPWSTR* ppszIcon)
         return SHStrDupW(pszRelativePath, ppszIcon);
     }
 
-    // For a packaged app (Sparse Package), the Windows Shell prefers ms-appx:/// URIs for assets.
-    UINT32 length = 0;
-    if (GetCurrentPackageFullName(&length, NULL) == ERROR_INSUFFICIENT_BUFFER)
-    {
-        std::wstring uri = L"ms-appx:///";
-        std::wstring relPath = pszRelativePath;
-        // Replace backslashes with forward slashes for URI compatibility
-        for (auto& ch : relPath) if (ch == L'\\') ch = L'/';
-        uri += relPath;
-        return SHStrDupW(uri.c_str(), ppszIcon);
-    }
+    std::wstring themeSubDir = GetThemeSubDir();
+    std::wstring relStr = pszRelativePath;
 
-    WCHAR szPath[MAX_PATH];
-    if (GetModuleFileNameW(g_hInst, szPath, ARRAYSIZE(szPath)))
+    // Construct the theme-specific relative path
+    std::wstring themePath;
+    if (relStr.find(L"Assets\\") == 0)
+        themePath = L"Assets\\" + themeSubDir + L"\\" + relStr.substr(7);
+    else if (relStr.find(L"Icons\\") == 0)
+        themePath = L"Icons\\" + themeSubDir + L"\\" + relStr.substr(6);
+    else
+        themePath = themeSubDir + L"\\" + relStr;
+
+    WCHAR szModule[MAX_PATH];
+    if (GetModuleFileNameW(g_hInst, szModule, ARRAYSIZE(szModule)))
     {
-        while (PathRemoveFileSpecW(szPath))
+        PathRemoveFileSpecW(szModule); // Directory containing the DLL (AppPackage)
+
+        // 1. Try absolute theme path
+        WCHAR szFull[MAX_PATH];
+        wcscpy_s(szFull, szModule);
+        PathAppendW(szFull, themePath.c_str());
+        if (PathFileExistsW(szFull))
         {
-            WCHAR szIconPath[MAX_PATH];
-            wcscpy_s(szIconPath, szPath);
-            PathAppendW(szIconPath, pszRelativePath);
-            if (PathFileExistsW(szIconPath))
-            {
-                return SHStrDupW(szIconPath, ppszIcon);
-            }
+            return SHStrDupW(szFull, ppszIcon);
+        }
+
+        // 2. Try absolute original path
+        wcscpy_s(szFull, szModule);
+        PathAppendW(szFull, pszRelativePath);
+        if (PathFileExistsW(szFull))
+        {
+            return SHStrDupW(szFull, ppszIcon);
         }
     }
+
     return E_FAIL;
 }
 
@@ -71,6 +81,11 @@ IFACEMETHODIMP XToolsMenuCommand::GetTitle(IShellItemArray*, LPWSTR* ppszName)
 
 IFACEMETHODIMP XToolsMenuCommand::GetIcon(IShellItemArray*, LPWSTR* ppszIcon)
 {
+    if (SUCCEEDED(ResolveRelativeIconPath(L"Assets\\ICON.ico", ppszIcon)))
+    {
+        return S_OK;
+    }
+
     WCHAR szModule[MAX_PATH];
     if (GetModuleFileNameW(g_hInst, szModule, ARRAYSIZE(szModule)))
     {
@@ -597,15 +612,15 @@ HRESULT XToolsCommandEnumerator::RuntimeClassInitialize()
 {
     _current = 0;
     ComPtr<IExplorerCommand> cmd;
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Attributes", XToolsAction::OpenExe, L"#102", L"AttributesDialog.exe"))) _commands.push_back(cmd);
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Terminal", XToolsAction::Terminal, L"#103"))) _commands.push_back(cmd);
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Terminal (admin)", XToolsAction::TerminalAdmin, L"#103"))) _commands.push_back(cmd);
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Edit with", XToolsAction::EditWith, L"#104"))) _commands.push_back(cmd);
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"System Folders", XToolsAction::SystemFolders, L"#105"))) _commands.push_back(cmd);
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Paste to File", XToolsAction::PasteToFile, L"#106"))) _commands.push_back(cmd);
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Copy Name", XToolsAction::CopyName, L"#107"))) _commands.push_back(cmd);
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Copy Path", XToolsAction::CopyPath, L"#108"))) _commands.push_back(cmd);
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Take Ownership", XToolsAction::TakeOwnership, L"#109"))) _commands.push_back(cmd);
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Attributes", XToolsAction::OpenExe, L"Assets\\Attributes.ico", L"AttributesDialog.exe"))) _commands.push_back(cmd);
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Terminal", XToolsAction::Terminal, L"Assets\\Terminals.ico"))) _commands.push_back(cmd);
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Terminal (admin)", XToolsAction::TerminalAdmin, L"Assets\\Terminals.ico"))) _commands.push_back(cmd);
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Edit with", XToolsAction::EditWith, L"Assets\\Edit with.ico"))) _commands.push_back(cmd);
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"System Folders", XToolsAction::SystemFolders, L"Assets\\System Folders.ico"))) _commands.push_back(cmd);
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Paste to File", XToolsAction::PasteToFile, L"Assets\\Paste to File.ico"))) _commands.push_back(cmd);
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Copy Name", XToolsAction::CopyName, L"Assets\\Copy Name.ico"))) _commands.push_back(cmd);
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Copy Path", XToolsAction::CopyPath, L"Assets\\Copy Path.ico"))) _commands.push_back(cmd);
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Take Ownership", XToolsAction::TakeOwnership, L"Assets\\Take Ownership.ico"))) _commands.push_back(cmd);
 
     // Load custom commands from registry
     HKEY hKey;
@@ -641,7 +656,7 @@ HRESULT XToolsCommandEnumerator::RuntimeClassInitialize()
         RegCloseKey(hKey);
     }
 
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Settings", XToolsAction::Settings, L"#110"))) _commands.push_back(cmd);
+    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Settings", XToolsAction::Settings, L"Assets\\Settings.ico"))) _commands.push_back(cmd);
     return S_OK;
 }
 
