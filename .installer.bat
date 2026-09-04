@@ -3,7 +3,7 @@ setlocal
 cd /d "%~dp0"
 
 :: Configuration
-set "CERT_PATH=xToolsMenu_Local.pfx"
+set "CERT_PATH=E:\.Vault\Certs\xToolsMenu_Local.pfx"
 set "CERT_PASS="
 set "SIGNTOOL=C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\signtool.exe"
 set "ISCC=C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
