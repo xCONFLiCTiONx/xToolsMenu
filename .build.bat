@@ -7,6 +7,7 @@ echo [1/4] Unregistering Existing Extension...
 echo ==========================================
 powershell -NoProfile -Command "Get-AppxPackage -Name xToolsMenu.Extension | Remove-AppxPackage -ErrorAction SilentlyContinue"
 reg delete "HKCU\Software\Classes\CLSID\{D1B6F6E9-4A9A-4B6A-8A4E-7C2D8D6E5C9A}" /f >nul 2>&1
+powershell.exe -NoProfile -Command "Stop-Process -Name explorer -Force"
 
 echo ==========================================
 echo [2/4] Locating MSBuild and Building Solution...
@@ -86,7 +87,7 @@ copy /y "%~dp0x64\Release\xToolsMenu.dll" "%StageDir%\" >nul
 echo ==========================================
 echo [4/4] Registering Sparse Package...
 echo ==========================================
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0register.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0.register.ps1"
 
 echo Local deployment complete!
 endlocal
