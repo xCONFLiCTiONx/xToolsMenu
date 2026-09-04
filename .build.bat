@@ -29,7 +29,7 @@ if not exist "xToolsMenu.slnx" (
     exit /b 1
 )
 
-msbuild xToolsMenu.slnx /p:Configuration=Release /p:Platform=x64
+msbuild xToolsMenu.slnx /p:Configuration=Release /p:Platform=x64 /t:Rebuild
 
 echo ==========================================
 echo Building Companion Executables & Resources...
@@ -57,7 +57,7 @@ if exist "src\SystemFoldersDialog.cpp" (
 )
 
 if exist "src\TakeOwnershipDialog.cpp" (
-    cl /nologo /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\TakeOwnership.exe src\TakeOwnershipDialog.cpp src\app.res /link /SUBSYSTEM:WINDOWS user32.lib advapi32.lib shell32.lib comctl32.lib gdi32.lib
+    cl /nologo /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\TakeOwnership.exe src\TakeOwnershipDialog.cpp src\app.res /link /SUBSYSTEM:WINDOWS user32.lib advapi32.lib shell32.lib comctl32.lib comctl32.lib gdi32.lib
 )
 
 if exist "src\SettingsDialog.cpp" (
@@ -65,7 +65,7 @@ if exist "src\SettingsDialog.cpp" (
 )
 
 echo ==========================================
-echo [3/4] Staging Binaries & Assets...
+echo [3/4] Staging Files into AppPackage...
 echo ==========================================
 set "StageDir=%~dp0AppPackage"
 if not exist "%StageDir%" mkdir "%StageDir%"
@@ -73,8 +73,15 @@ if not exist "%StageDir%" mkdir "%StageDir%"
 copy /y "AppxManifest.xml" "%StageDir%\" >nul
 if exist "Assets" xcopy /y /s /i "Assets" "%StageDir%\Assets" >nul
 if exist "Icons" xcopy /y /s /i "Icons" "%StageDir%\Icons" >nul
-copy /y "x64\Release\*.exe" "%StageDir%\" >nul
-copy /y "x64\Release\*.dll" "%StageDir%\" >nul
+
+echo Copying explicit binaries to AppPackage...
+copy /y "%~dp0x64\Release\AttributesDialog.exe" "%StageDir%\" >nul
+copy /y "%~dp0x64\Release\EditWithDialog.exe" "%StageDir%\" >nul
+copy /y "%~dp0x64\Release\Launcher.exe" "%StageDir%\" >nul
+copy /y "%~dp0x64\Release\Settings.exe" "%StageDir%\" >nul
+copy /y "%~dp0x64\Release\SystemFoldersDialog.exe" "%StageDir%\" >nul
+copy /y "%~dp0x64\Release\TakeOwnership.exe" "%StageDir%\" >nul
+copy /y "%~dp0x64\Release\xToolsMenu.dll" "%StageDir%\" >nul
 
 echo ==========================================
 echo [4/4] Registering Sparse Package...
