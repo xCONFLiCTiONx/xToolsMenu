@@ -1,4 +1,4 @@
-![xToolsMenu Logo](E:/xToolsMenu/ICON.png)
+<img src="ICON.png" width="150" alt="xToolsMenu Logo">
 
 # xToolsMenu
 
