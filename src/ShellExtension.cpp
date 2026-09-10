@@ -1,6 +1,6 @@
 #include "ShellExtension.h"
 #include "resource.h"
-#include "Theme.h"
+#include "DarkMode.h"
 #include <shlwapi.h>
 #include <shlobj.h>
 #include <vector>
@@ -35,7 +35,7 @@ static HRESULT ResolveRelativeIconPath(PCWSTR pszRelativePath, LPWSTR* ppszIcon)
         return SHStrDupW(pszRelativePath, ppszIcon);
     }
 
-    std::wstring themeSubDir = GetThemeSubDir();
+    std::wstring themeSubDir = DarkModeManager::GetThemeSubDir();
     std::wstring relStr = pszRelativePath;
 
     // Construct the theme-specific relative path

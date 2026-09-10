@@ -1,4 +1,8 @@
 #include "resource.h"
+#include <winuser.h>
+
+1 24 "manifest.xml"
+
 IDI_ICON1 ICON "..\\ICON.ico"
 IDI_ICON_ATTRIBUTES    ICON "..\\Icons\\Dark\\Attributes.ico"
 IDI_ICON_TERMINALS     ICON "..\\Icons\\Dark\\Terminals.ico"

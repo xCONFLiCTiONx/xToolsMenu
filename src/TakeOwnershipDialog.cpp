@@ -9,6 +9,7 @@
 #include <accctrl.h>
 #include <aclapi.h>
 #include "resource.h"
+#include "DarkMode.h"
 
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "comctl32.lib")
@@ -114,6 +115,7 @@ void WorkerThread(HWND hwnd, PSID pSid) {
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
     case WM_CREATE: {
+        ApplyNativeDarkMode(hwnd);
         HINSTANCE hInst = ((LPCREATESTRUCT)lParam)->hInstance;
         HDC hdc = GetDC(hwnd);
         int logHeight = -MulDiv(9, GetDeviceCaps(hdc, LOGPIXELSY), 72);
@@ -135,6 +137,17 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         }, 0);
         return 0;
     }
+    case WM_ERASEBKGND:
+    {
+        if (DarkModeManager::IsDarkMode())
+        {
+            RECT rc;
+            GetClientRect(hwnd, &rc);
+            FillRect((HDC)wParam, &rc, DarkModeManager::GetBackgroundBrush());
+            return TRUE;
+        }
+        break;
+    }
     case WM_COMMAND: {
         if (LOWORD(wParam) == IDOK) {
             if (g_finished) {
@@ -148,7 +161,27 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         }
         return 0;
     }
+    case WM_SETTINGCHANGE:
+    {
+        DarkModeManager::OnSettingChange(hwnd, lParam);
+        return 0;
+    }
+    case WM_CTLCOLORDLG:
+    case WM_CTLCOLORSTATIC:
+    case WM_CTLCOLOREDIT:
+    case WM_CTLCOLORLISTBOX:
+    {
+        if (DarkModeManager::IsDarkMode())
+        {
+            HDC hdc = (HDC)wParam;
+            SetTextColor(hdc, DarkModeManager::GetTextColor());
+            SetBkColor(hdc, DarkModeManager::GetBackgroundColor());
+            return (LRESULT)DarkModeManager::GetBackgroundBrush();
+        }
+        break;
+    }
     case WM_DESTROY:
+        DarkModeManager::Cleanup();
         if (g_hFont) DeleteObject(g_hFont);
         PostQuitMessage(0);
         return 0;
@@ -172,7 +205,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     const wchar_t CLASS_NAME[] = L"TakeOwnershipDialogClass";
     WNDCLASSEXW wc = { sizeof(WNDCLASSEX), CS_HREDRAW | CS_VREDRAW, WindowProc, 0, 0, hInstance,
         (HICON)LoadImage(hInstance, MAKEINTRESOURCE(IDI_ICON1), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_SHARED),
-        LoadCursor(NULL, IDC_ARROW), (HBRUSH)(COLOR_BTNFACE + 1), NULL, CLASS_NAME, NULL };
+        LoadCursor(NULL, IDC_ARROW), NULL, NULL, CLASS_NAME, NULL };
     RegisterClassExW(&wc);
 
     HWND hwnd = CreateWindowExW(0, CLASS_NAME, L"Take Ownership", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,

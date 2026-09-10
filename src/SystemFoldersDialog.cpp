@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include "resource.h"
+#include "DarkMode.h"
 
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "shell32.lib")
@@ -48,6 +49,7 @@ void OpenFolder(int index) {
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
     case WM_CREATE: {
+        ApplyNativeDarkMode(hwnd);
         HINSTANCE hInst = ((LPCREATESTRUCT)lParam)->hInstance;
 
         HDC hdc = GetDC(hwnd);
@@ -63,6 +65,17 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         }
         return 0;
     }
+    case WM_ERASEBKGND:
+    {
+        if (DarkModeManager::IsDarkMode())
+        {
+            RECT rc;
+            GetClientRect(hwnd, &rc);
+            FillRect((HDC)wParam, &rc, DarkModeManager::GetBackgroundBrush());
+            return TRUE;
+        }
+        break;
+    }
     case WM_COMMAND: {
         int id = LOWORD(wParam);
         if (id >= 0 && id < g_folders.size()) {
@@ -71,7 +84,29 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         }
         return 0;
     }
+    case WM_SETTINGCHANGE:
+    {
+        DarkModeManager::OnSettingChange(hwnd, lParam);
+        return 0;
+    }
+    case WM_CTLCOLORDLG:
+    case WM_CTLCOLORSTATIC:
+    case WM_CTLCOLOREDIT:
+    case WM_CTLCOLORLISTBOX:
+    case WM_CTLCOLORBTN:
+    {
+        if (DarkModeManager::IsDarkMode())
+        {
+            HDC hdc = (HDC)wParam;
+            SetTextColor(hdc, DarkModeManager::GetTextColor());
+            SetBkColor(hdc, DarkModeManager::GetBackgroundColor());
+            SetBkMode(hdc, TRANSPARENT);
+            return (LRESULT)DarkModeManager::GetBackgroundBrush();
+        }
+        break;
+    }
     case WM_DESTROY:
+        DarkModeManager::Cleanup();
         if (g_hFont) DeleteObject(g_hFont);
         PostQuitMessage(0);
         return 0;
@@ -91,7 +126,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = hInstance;
     wc.lpszClassName = CLASS_NAME;
-    wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+    wc.hbrBackground = NULL;
     wc.hIcon = hIcon;
     wc.hIconSm = hIcon;
 

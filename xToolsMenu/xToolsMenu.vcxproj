@@ -147,12 +147,16 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="..\src\DarkMode.h" />
     <ClInclude Include="..\src\ShellExtension.h" />
     <ClInclude Include="..\src\resource.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="pch.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\src\DarkMode.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="..\src\ShellExtension.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>

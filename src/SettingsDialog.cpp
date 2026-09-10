@@ -7,7 +7,7 @@
 #include <vector>
 #include <map>
 #include "resource.h"
-#include "Theme.h"
+#include "DarkMode.h"
 
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "advapi32.lib")
@@ -212,6 +212,7 @@ void UpdateTabVisibility() {
             }
             RegCloseKey(hKey);
         }
+        DarkModeManager::ApplyToControls(GetParent(g_hTab));
     }
 
     ToggleGroup(g_fileSettings, sel == 0);
@@ -244,13 +245,15 @@ void UpdateTabVisibility() {
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
     case WM_CREATE: {
+        ApplyNativeDarkMode(hwnd);
         HINSTANCE hInst = ((LPCREATESTRUCT)lParam)->hInstance;
         HDC hdc = GetDC(hwnd);
         int logHeight = -MulDiv(9, GetDeviceCaps(hdc, LOGPIXELSY), 72);
         ReleaseDC(hwnd, hdc);
         g_hFont = CreateFontW(logHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
 
-        g_hTab = CreateWindowW(WC_TABCONTROLW, L"", WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS, 10, 10, 380, 370, hwnd, NULL, hInst, NULL);
+        g_hTab = CreateWindowW(WC_TABCONTROLW, L"", WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | TCS_OWNERDRAWFIXED, 10, 10, 380, 370, hwnd, NULL, hInst, NULL);
+        DarkModeManager::FixTabControl(g_hTab);
         SendMessage(g_hTab, WM_SETFONT, (WPARAM)g_hFont, TRUE);
 
         TCITEMW tie = { TCIF_TEXT };
@@ -478,12 +481,83 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         }
         return 0;
     }
+    case WM_ERASEBKGND:
+    {
+        if (DarkModeManager::IsDarkMode())
+        {
+            RECT rc;
+            GetClientRect(hwnd, &rc);
+            FillRect((HDC)wParam, &rc, DarkModeManager::GetBackgroundBrush());
+            return TRUE;
+        }
+        break;
+    }
+    case WM_DRAWITEM:
+    {
+        LPDRAWITEMSTRUCT lpDrawItem = (LPDRAWITEMSTRUCT)lParam;
+        if (lpDrawItem->hwndItem == g_hTab)
+        {
+            WCHAR szText[256];
+            TCITEMW tci = { TCIF_TEXT };
+            tci.pszText = szText;
+            tci.cchTextMax = 256;
+            TabCtrl_GetItem(g_hTab, lpDrawItem->itemID, &tci);
+
+            HDC hdc = lpDrawItem->hDC;
+            RECT rc = lpDrawItem->rcItem;
+
+            bool isDarkMode = DarkModeManager::IsDarkMode();
+            HBRUSH hbr = isDarkMode ? DarkModeManager::GetBackgroundBrush() : GetSysColorBrush(COLOR_BTNFACE);
+            FillRect(hdc, &rc, hbr);
+
+            SetTextColor(hdc, isDarkMode ? DarkModeManager::GetTextColor() : GetSysColor(COLOR_BTNTEXT));
+            SetBkMode(hdc, TRANSPARENT);
+            DrawTextW(hdc, szText, -1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+            if (lpDrawItem->itemState & ODS_SELECTED)
+            {
+                // Draw a simple underline or highlight for selected tab
+                RECT rcHighlight = rc;
+                rcHighlight.top = rcHighlight.bottom - 3;
+                HBRUSH hbrSel = CreateSolidBrush(isDarkMode ? RGB(0, 120, 215) : GetSysColor(COLOR_HIGHLIGHT));
+                FillRect(hdc, &rcHighlight, hbrSel);
+                DeleteObject(hbrSel);
+            }
+            return TRUE;
+        }
+        break;
+    }
     case WM_NOTIFY: {
         LPNMHDR nmhdr = (LPNMHDR)lParam;
         if (nmhdr->code == TCN_SELCHANGE) { UpdateTabVisibility(); InvalidateRect(hwnd, NULL, TRUE); }
         return 0;
     }
-    case WM_DESTROY: if (g_hFont) DeleteObject(g_hFont); PostQuitMessage(0); return 0;
+    case WM_SETTINGCHANGE:
+    {
+        DarkModeManager::OnSettingChange(hwnd, lParam);
+        return 0;
+    }
+    case WM_CTLCOLORDLG:
+    case WM_CTLCOLORSTATIC:
+    case WM_CTLCOLOREDIT:
+    case WM_CTLCOLORLISTBOX:
+    case WM_CTLCOLORBTN:
+    {
+        if (DarkModeManager::IsDarkMode())
+        {
+            HDC hdc = (HDC)wParam;
+            SetTextColor(hdc, DarkModeManager::GetTextColor());
+            SetBkColor(hdc, DarkModeManager::GetBackgroundColor());
+            SetBkMode(hdc, TRANSPARENT);
+            return (LRESULT)DarkModeManager::GetBackgroundBrush();
+        }
+        break;
+    }
+    case WM_DESTROY:
+        DarkModeManager::Cleanup();
+        if (g_hFont) DeleteObject(g_hFont);
+        PostQuitMessage(0);
+        return 0;
     }
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
@@ -505,7 +579,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     INITCOMMONCONTROLSEX icex = { sizeof(icex), ICC_TAB_CLASSES }; InitCommonControlsEx(&icex);
     const wchar_t CLASS_NAME[] = L"SettingsDialogClass";
     HICON hIcon = (HICON)LoadImage(hInstance, MAKEINTRESOURCE(IDI_ICON1), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
-    WNDCLASSEXW wc = { sizeof(WNDCLASSEX), CS_HREDRAW | CS_VREDRAW, WindowProc, 0, 0, hInstance, hIcon, LoadCursor(NULL, IDC_ARROW), (HBRUSH)(COLOR_BTNFACE + 1), NULL, CLASS_NAME, hIcon };
+    WNDCLASSEXW wc = { sizeof(WNDCLASSEX), CS_HREDRAW | CS_VREDRAW, WindowProc, 0, 0, hInstance, hIcon, LoadCursor(NULL, IDC_ARROW), NULL, NULL, CLASS_NAME, hIcon };
     RegisterClassExW(&wc);
     HWND hwnd = CreateWindowExW(0, CLASS_NAME, L"xToolsMenu Settings", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, CW_USEDEFAULT, CW_USEDEFAULT, 420, 450, NULL, NULL, hInstance, NULL);
     if (!hwnd) return 0;
