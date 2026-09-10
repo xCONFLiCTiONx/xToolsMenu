@@ -14,6 +14,7 @@ xToolsMenu is a Windows 11 Shell Extension that adds a "Power User" context menu
 - **Copy Name**: Copies the filenames of all selected items to the clipboard. (Hidden when clicking directory background).
 - **Copy Path**: Copies the full absolute paths of all selected items to the clipboard. (Hidden when clicking directory background).
 - **Take Ownership**: Recursively takes ownership of the selected files or folders and grants full control to the current user and the Administrators group.
+- **Custom Commands**: Run commands with arguments.
 
 ## Implementation Details
 
