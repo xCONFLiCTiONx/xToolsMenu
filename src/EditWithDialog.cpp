@@ -142,7 +142,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             SendMessage(hBtn, WM_SETFONT, (WPARAM)g_hFont, TRUE);
             y += 45;
         }
-
+        DarkModeManager::ApplyToControls(hwnd);
         return 0;
     }
     case WM_ERASEBKGND:

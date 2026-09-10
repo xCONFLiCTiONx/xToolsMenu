@@ -261,6 +261,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         SendMessage(g_hChkSetReadOnly, BM_SETCHECK, sel.allReadOnly ? BST_CHECKED : (sel.someReadOnly ? BST_INDETERMINATE : BST_UNCHECKED), 0);
 
         LoadTimeFromSelection();
+        DarkModeManager::ApplyToControls(hwnd);
         return 0;
     }
     case WM_ERASEBKGND:

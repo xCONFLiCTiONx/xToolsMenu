@@ -85,21 +85,47 @@ void DarkModeManager::ApplyToControls(HWND hwnd)
     EnumChildWindows(hwnd, [](HWND hChild, LPARAM lp) -> BOOL {
         bool dark = (bool)lp;
         WCHAR className[256];
-        GetClassNameW(hChild, className, 256);
+        if (!GetClassNameW(hChild, className, 256)) return TRUE;
+
+        // Allow dark mode for the child window
+        if (_AllowDarkModeForWindow) _AllowDarkModeForWindow(hChild, dark);
 
         // Apply dark theme to standard controls
         if (_wcsicmp(className, L"BUTTON") == 0 ||
             _wcsicmp(className, L"EDIT") == 0 ||
             _wcsicmp(className, L"STATIC") == 0 ||
-            _wcsicmp(className, WC_COMBOBOXW) == 0 ||
             _wcsicmp(className, WC_LISTVIEWW) == 0 ||
             _wcsicmp(className, WC_TREEVIEWW) == 0 ||
-            _wcsicmp(className, WC_TABCONTROLW) == 0)
+            _wcsicmp(className, WC_TABCONTROLW) == 0 ||
+            _wcsicmp(className, DATETIMEPICK_CLASSW) == 0 ||
+            _wcsicmp(className, UPDOWN_CLASSW) == 0 ||
+            _wcsicmp(className, L"ListBox") == 0)
         {
             SetWindowTheme(hChild, dark ? L"DarkMode_Explorer" : nullptr, nullptr);
+            if (dark) InvalidateRect(hChild, NULL, TRUE);
 
-            if (_wcsicmp(className, L"BUTTON") == 0 || _wcsicmp(className, WC_COMBOBOXW) == 0)
+            if (dark && _wcsicmp(className, DATETIMEPICK_CLASSW) == 0)
             {
+                COLORREF darkBG = RGB(32, 32, 32);
+                COLORREF darkText = RGB(255, 255, 255);
+                SendMessage(hChild, DTM_SETMCCOLOR, MCSC_BACKGROUND, (LPARAM)darkBG);
+                SendMessage(hChild, DTM_SETMCCOLOR, MCSC_MONTHBK, (LPARAM)darkBG);
+                SendMessage(hChild, DTM_SETMCCOLOR, MCSC_TEXT, (LPARAM)darkText);
+                SendMessage(hChild, DTM_SETMCCOLOR, MCSC_TITLEBK, (LPARAM)darkBG);
+                SendMessage(hChild, DTM_SETMCCOLOR, MCSC_TITLETEXT, (LPARAM)darkText);
+            }
+        }
+        else if (_wcsicmp(className, WC_COMBOBOXW) == 0)
+        {
+            SetWindowTheme(hChild, dark ? L"Explorer" : nullptr, nullptr);
+            if (dark)
+            {
+                COMBOBOXINFO cbi = { sizeof(cbi) };
+                if (SendMessage(hChild, CB_GETCOMBOBOXINFO, 0, (LPARAM)&cbi))
+                {
+                    if (_AllowDarkModeForWindow) _AllowDarkModeForWindow(cbi.hwndList, dark);
+                    SetWindowTheme(cbi.hwndList, L"DarkMode_Explorer", nullptr);
+                }
                 InvalidateRect(hChild, NULL, TRUE);
             }
         }

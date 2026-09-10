@@ -33,7 +33,7 @@ if not exist "xToolsMenu.slnx" (
 msbuild xToolsMenu.slnx /p:Configuration=Release /p:Platform=x64 /t:Rebuild
 
 echo ==========================================
-echo Building Companion Executables & Resources...
+echo Building Companion Executables ^& Resources...
 echo ==========================================
 if not exist "x64\Release" mkdir "x64\Release"
 
