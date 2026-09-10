@@ -425,7 +425,9 @@ IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiItemArray, IBindCtx*
             for (const auto& path : paths)
             {
                 if (!fullArgs.empty()) fullArgs += L" ";
-                fullArgs += L"\""; fullArgs += path; fullArgs += L"\"";
+                std::wstring p = path;
+                if (!p.empty() && p.back() == L'\\') p += L'\\';
+                fullArgs += L"\""; fullArgs += p; fullArgs += L"\"";
             }
             ShellExecuteW(NULL, _runAsAdmin ? L"runas" : L"open", exePath.c_str(), fullArgs.empty() ? NULL : fullArgs.c_str(), NULL, SW_SHOWNORMAL);
         }
@@ -464,7 +466,9 @@ IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiItemArray, IBindCtx*
             WCHAR szDir[MAX_PATH]; wcscpy_s(szDir, path);
             DWORD attrs = GetFileAttributesW(path);
             if (!(attrs & FILE_ATTRIBUTE_DIRECTORY)) PathRemoveFileSpecW(szDir);
-            std::wstring parameters = L"-d \"" + std::wstring(szDir) + L"\"";
+            std::wstring dirStr(szDir);
+            if (!dirStr.empty() && dirStr.back() == L'\\') dirStr += L'\\';
+            std::wstring parameters = L"-d \"" + dirStr + L"\"";
             ShellExecuteW(NULL, _action == XToolsAction::TerminalAdmin ? L"runas" : L"open", L"wt.exe", parameters.c_str(), szDir, SW_SHOWNORMAL);
             CoTaskMemFree(path);
         }
