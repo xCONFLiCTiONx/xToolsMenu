@@ -115,7 +115,7 @@ void SelectCustomCommand() {
 
     HKEY hKey;
     std::wstring subPath = std::wstring(REG_CUSTOM) + L"\\" + name;
-    WCHAR path[MAX_PATH] = { 0 }, args[MAX_PATH] = { 0 }, iconPath[MAX_PATH] = { 0 };
+    WCHAR path[MAX_PATH] = { 0 }, args[32768] = { 0 }, iconPath[MAX_PATH] = { 0 };
     DWORD pSize = sizeof(path), aSize = sizeof(args), iSize = sizeof(iconPath), f = 1, d = 1, b = 1, admin = 0, dwSize = sizeof(DWORD);
 
     RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), L"Path", RRF_RT_REG_SZ, NULL, path, &pSize);
@@ -201,17 +201,17 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         g_hComboCustom = CreateWindowW(WC_COMBOBOXW, L"", WS_CHILD | CBS_DROPDOWNLIST | WS_VSCROLL, 130, y - 3, 220, 200, hwnd, (HMENU)200, hInst, NULL);
         y += 40;
         g_hStaticName = CreateWindowW(L"STATIC", L"Name:", WS_CHILD, 25, y, 50, 25, hwnd, NULL, hInst, NULL);
-        g_hEditName = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD, 80, y, 200, 25, hwnd, NULL, hInst, NULL);
+        g_hEditName = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, 80, y, 200, 25, hwnd, NULL, hInst, NULL);
         y += 35;
         g_hStaticPath = CreateWindowW(L"STATIC", L"Path:", WS_CHILD, 25, y, 50, 25, hwnd, NULL, hInst, NULL);
-        g_hEditPath = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD, 80, y, 240, 25, hwnd, NULL, hInst, NULL);
+        g_hEditPath = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, 80, y, 240, 25, hwnd, NULL, hInst, NULL);
         g_hBtnBrowse = CreateWindowW(L"BUTTON", L"...", WS_CHILD, 325, y, 35, 25, hwnd, (HMENU)102, hInst, NULL);
         y += 35;
         g_hStaticArgs = CreateWindowW(L"STATIC", L"Args:", WS_CHILD, 25, y, 50, 25, hwnd, NULL, hInst, NULL);
-        g_hEditArgs = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD, 80, y, 280, 25, hwnd, NULL, hInst, NULL);
+        g_hEditArgs = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, 80, y, 280, 25, hwnd, NULL, hInst, NULL);
         y += 35;
         g_hStaticIcon = CreateWindowW(L"STATIC", L"Icon:", WS_CHILD, 25, y, 50, 25, hwnd, NULL, hInst, NULL);
-        g_hEditIcon = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD, 80, y, 240, 25, hwnd, NULL, hInst, NULL);
+        g_hEditIcon = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, 80, y, 240, 25, hwnd, NULL, hInst, NULL);
         g_hBtnBrowseIcon = CreateWindowW(L"BUTTON", L"...", WS_CHILD, 325, y, 35, 25, hwnd, (HMENU)104, hInst, NULL);
         y += 35;
         g_hChkFile = CreateWindowW(L"BUTTON", L"File", WS_CHILD | BS_AUTOCHECKBOX, 80, y, 60, 25, hwnd, NULL, hInst, NULL);
@@ -238,10 +238,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         if (wmId == 200 && HIWORD(wParam) == CBN_SELCHANGE) { SelectCustomCommand(); return 0; }
         if (HIWORD(wParam) == BN_CLICKED) {
             if (wmId == 100 || wmId == 103) { // Add or Edit
-                WCHAR name[256], path[MAX_PATH], args[MAX_PATH], iconPath[MAX_PATH];
+                WCHAR name[256], path[MAX_PATH], args[32768], iconPath[MAX_PATH];
                 GetWindowTextW(g_hEditName, name, 256);
                 GetWindowTextW(g_hEditPath, path, MAX_PATH);
-                GetWindowTextW(g_hEditArgs, args, MAX_PATH);
+                GetWindowTextW(g_hEditArgs, args, 32768);
                 GetWindowTextW(g_hEditIcon, iconPath, MAX_PATH);
                 DWORD f = (SendMessage(g_hChkFile, BM_GETCHECK, 0, 0) == BST_CHECKED), d = (SendMessage(g_hChkDir, BM_GETCHECK, 0, 0) == BST_CHECKED), b = (SendMessage(g_hChkBG, BM_GETCHECK, 0, 0) == BST_CHECKED);
                 DWORD admin = (SendMessage(g_hChkAdmin, BM_GETCHECK, 0, 0) == BST_CHECKED);
@@ -326,6 +326,38 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     RECT rect; GetWindowRect(hwnd, &rect);
     SetWindowPos(hwnd, NULL, (GetSystemMetrics(SM_CXSCREEN) - (rect.right - rect.left)) / 2, (GetSystemMetrics(SM_CYSCREEN) - (rect.bottom - rect.top)) / 2, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
     ShowWindow(hwnd, nCmdShow);
-    MSG msg; while (GetMessage(&msg, NULL, 0, 0)) { TranslateMessage(&msg); DispatchMessage(&msg); }
+    MSG msg;
+    while (GetMessage(&msg, NULL, 0, 0)) {
+        // Only run IsDialogMessageW if the current focused window is NOT an Edit control.
+        // IsDialogMessageW swallows keystrokes like Ctrl+A inside standard Win32 Edit fields.
+        HWND hFocus = GetFocus();
+        WCHAR className[64];
+        bool isEdit = false;
+        if (hFocus && GetClassNameW(hFocus, className, 64)) {
+            if (_wcsicmp(className, L"EDIT") == 0) {
+                isEdit = true;
+            }
+        }
+
+        // Process Ctrl+A manually for standard Edit controls since Win32 EDIT doesn't do it natively
+        if (isEdit && msg.message == WM_KEYDOWN && GetAsyncKeyState(VK_CONTROL) < 0 && msg.wParam == 'A') {
+            SendMessageW(hFocus, EM_SETSEL, 0, -1);
+            continue;
+        }
+
+        if (isEdit) {
+            // Tab, Arrows, etc. navigation keys inside the window when an edit is focused
+            if (msg.message == WM_KEYDOWN && (msg.wParam == VK_TAB || msg.wParam == VK_ESCAPE || msg.wParam == VK_RETURN)) {
+                if (IsDialogMessageW(hwnd, &msg)) continue;
+            }
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        } else {
+            if (!IsDialogMessageW(hwnd, &msg)) {
+                TranslateMessage(&msg);
+                DispatchMessage(&msg);
+            }
+        }
+    }
     return 0;
 }

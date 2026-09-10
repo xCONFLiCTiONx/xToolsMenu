@@ -637,7 +637,7 @@ HRESULT XToolsCommandEnumerator::RuntimeClassInitialize()
             WCHAR name[256]; DWORD nSize = 256;
             if (RegEnumKeyExW(hKey, i, name, &nSize, NULL, NULL, NULL, NULL) == ERROR_SUCCESS)
             {
-                WCHAR path[MAX_PATH], args[MAX_PATH], iconPath[MAX_PATH];
+                WCHAR path[MAX_PATH], args[32768], iconPath[MAX_PATH];
                 DWORD pSize = sizeof(path), aSize = sizeof(args), iSize = sizeof(iconPath);
                 DWORD showFile = 1, showDir = 1, showBG = 1, runAsAdmin = 0;
                 DWORD dwSize = sizeof(DWORD);
