@@ -380,12 +380,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 ofn.lpstrFilter = L"Icons (EXE, DLL, ICO)\0*.exe;*.dll;*.ico\0All Files (*.*)\0*.*\0";
                 ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
                 if (GetOpenFileNameW(&ofn)) {
-                    // Auto-populate name field
-                    WCHAR* pName = wcsrchr(szFile, L'\\'); if (pName) pName++; else pName = szFile;
-                    std::wstring newNameStr = pName; size_t pos = newNameStr.find_last_of(L".");
-                    if (pos != std::wstring::npos) newNameStr = newNameStr.substr(0, pos);
-                    SetWindowTextW(g_hEditName, newNameStr.c_str());
-
                     UINT numIcons = ExtractIconExW(szFile, -1, NULL, NULL, 0);
                     if (numIcons > 1) {
                         int iconIndex = 0;
