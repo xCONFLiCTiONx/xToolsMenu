@@ -16,6 +16,48 @@
 
 HFONT g_hFont = nullptr;
 
+bool IsElevated() {
+    HANDLE hToken = NULL;
+    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
+        TOKEN_ELEVATION elevation;
+        DWORD dwSize = sizeof(elevation);
+        if (GetTokenInformation(hToken, TokenElevation, &elevation, sizeof(elevation), &dwSize)) {
+            CloseHandle(hToken);
+            return elevation.TokenIsElevated != 0;
+        }
+        CloseHandle(hToken);
+    }
+    return false;
+}
+
+void Elevate(HWND hwnd) {
+    WCHAR szExe[MAX_PATH];
+    GetModuleFileNameW(NULL, szExe, MAX_PATH);
+
+    int argc;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (!argv) return;
+    std::wstring args;
+    for (int i = 1; i < argc; i++) {
+        if (!args.empty()) args += L" ";
+        args += L"\"";
+        args += argv[i];
+        args += L"\"";
+    }
+    LocalFree(argv);
+
+    SHELLEXECUTEINFOW sei = { sizeof(sei) };
+    sei.cbSize = sizeof(sei);
+    sei.fMask = SEE_MASK_DEFAULT;
+    sei.lpVerb = L"runas";
+    sei.lpFile = szExe;
+    sei.lpParameters = args.c_str();
+    sei.nShow = SW_SHOWNORMAL;
+    if (ShellExecuteExW(&sei)) {
+        DestroyWindow(hwnd);
+    }
+}
+
 const wchar_t* REG_PATH = L"Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced";
 
 HWND g_hChkShowHidden = nullptr, g_hChkShowSystem = nullptr;
@@ -196,6 +238,11 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         CreateTimeRow(L"Last Access:", 170, g_timeAccess, 110);
         CreateTimeRow(L"Last Write:", 200, g_timeWrite, 120);
 
+        if (!IsElevated()) {
+            HWND hBtn = CreateWindowW(L"BUTTON", L"Run as Administrator", WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, 250, 235, 150, 30, hwnd, (HMENU)200, hInst, NULL);
+            SendMessage(hBtn, BCM_SETSHIELD, 0, TRUE);
+        }
+
         // Apply Font to all children
         EnumChildWindows(hwnd, [](HWND hChild, LPARAM lp) -> BOOL {
             SendMessage(hChild, WM_SETFONT, (WPARAM)g_hFont, TRUE);
@@ -233,6 +280,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, NULL, NULL);
             } else if (wmId >= 3 && wmId <= 5) {
                 ApplyFileAttributes(wmId, SendMessage((HWND)lParam, BM_GETCHECK, 0, 0) == BST_CHECKED);
+            } else if (wmId == 200) {
+                Elevate(hwnd);
             }
         }
         return 0;
@@ -276,9 +325,10 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
         title = PathFindFileNameW(argv[1]);
         LocalFree(argv);
     }
+    if (IsElevated()) title += L" (Administrator)";
 
     HWND hwnd = CreateWindowExW(0, CLASS_NAME, title.c_str(), WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
-        CW_USEDEFAULT, CW_USEDEFAULT, 420, 280, NULL, NULL, hInstance, NULL);
+        CW_USEDEFAULT, CW_USEDEFAULT, 420, 315, NULL, NULL, hInstance, NULL);
 
     if (hwnd == NULL) return 0;
 
