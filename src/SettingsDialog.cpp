@@ -60,6 +60,7 @@ HWND g_hEditName = nullptr, g_hEditPath = nullptr, g_hEditArgs = nullptr, g_hEdi
 HWND g_hBtnAdd = nullptr, g_hBtnEdit = nullptr, g_hBtnDel = nullptr, g_hBtnBrowse = nullptr, g_hBtnBrowseIcon = nullptr;
 HWND g_hStaticSelect = nullptr, g_hStaticName = nullptr, g_hStaticPath = nullptr, g_hStaticArgs = nullptr, g_hStaticIcon = nullptr;
 HWND g_hChkFile = nullptr, g_hChkDir = nullptr, g_hChkBG = nullptr, g_hChkAdmin = nullptr;
+HWND g_hBtnBackup = nullptr, g_hBtnRestore = nullptr;
 
 bool GetSetting(const wchar_t* name) {
     DWORD value = 1, size = sizeof(value);
@@ -163,6 +164,8 @@ void UpdateTabVisibility() {
     ShowWindow(g_hChkDir, bCustom ? SW_SHOW : SW_HIDE);
     ShowWindow(g_hChkBG, bCustom ? SW_SHOW : SW_HIDE);
     ShowWindow(g_hChkAdmin, bCustom ? SW_SHOW : SW_HIDE);
+    ShowWindow(g_hBtnBackup, bCustom ? SW_SHOW : SW_HIDE);
+    ShowWindow(g_hBtnRestore, bCustom ? SW_SHOW : SW_HIDE);
 }
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -224,6 +227,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         g_hBtnAdd = CreateWindowW(L"BUTTON", L"Add", WS_CHILD, 40, y, 100, 30, hwnd, (HMENU)100, hInst, NULL);
         g_hBtnEdit = CreateWindowW(L"BUTTON", L"Edit", WS_CHILD, 150, y, 100, 30, hwnd, (HMENU)103, hInst, NULL);
         g_hBtnDel = CreateWindowW(L"BUTTON", L"Delete", WS_CHILD, 260, y, 100, 30, hwnd, (HMENU)101, hInst, NULL);
+
+        y += 40;
+        g_hBtnBackup = CreateWindowW(L"BUTTON", L"Backup Settings...", WS_CHILD, 40, y, 150, 25, hwnd, (HMENU)105, hInst, NULL);
+        g_hBtnRestore = CreateWindowW(L"BUTTON", L"Restore Settings...", WS_CHILD, 210, y, 150, 25, hwnd, (HMENU)106, hInst, NULL);
 
         EnumChildWindows(hwnd, [](HWND hChild, LPARAM lp) -> BOOL {
             SendMessage(hChild, WM_SETFONT, (WPARAM)g_hFont, TRUE);
@@ -293,6 +300,56 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
                 if (GetOpenFileNameW(&ofn)) {
                     SetWindowTextW(g_hEditIcon, szFile);
+                }
+            } else if (wmId == 105) { // Backup
+                OPENFILENAMEW ofn = { sizeof(ofn) };
+                WCHAR szFile[MAX_PATH] = { 0 };
+                wcscpy_s(szFile, L"xToolsMenu_Backup.reg");
+                ofn.hwndOwner = hwnd; ofn.lpstrFile = szFile; ofn.nMaxFile = MAX_PATH;
+                ofn.lpstrFilter = L"Registry Files (*.reg)\0*.reg\0";
+                ofn.Flags = OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST;
+                ofn.lpstrDefExt = L"reg";
+                if (GetSaveFileNameW(&ofn)) {
+                    std::wstring cmd = L"export \"HKEY_CURRENT_USER\\Software\\xToolsMenu\" \"" + std::wstring(szFile) + L"\" /y";
+                    SHELLEXECUTEINFOW sei = { sizeof(sei) };
+                    sei.fMask = SEE_MASK_NOCLOSEPROCESS;
+                    sei.lpVerb = L"open";
+                    sei.lpFile = L"reg.exe";
+                    sei.lpParameters = cmd.c_str();
+                    sei.nShow = SW_HIDE;
+                    if (ShellExecuteExW(&sei)) {
+                        if (sei.hProcess) {
+                            WaitForSingleObject(sei.hProcess, INFINITE);
+                            CloseHandle(sei.hProcess);
+                        }
+                        MessageBoxW(hwnd, L"Settings exported successfully!", L"Backup", MB_OK | MB_ICONINFORMATION);
+                    } else {
+                        MessageBoxW(hwnd, L"Failed to export settings.", L"Error", MB_OK | MB_ICONERROR);
+                    }
+                }
+            } else if (wmId == 106) { // Restore
+                OPENFILENAMEW ofn = { sizeof(ofn) }; WCHAR szFile[MAX_PATH] = { 0 };
+                ofn.hwndOwner = hwnd; ofn.lpstrFile = szFile; ofn.nMaxFile = MAX_PATH;
+                ofn.lpstrFilter = L"Registry Files (*.reg)\0*.reg\0";
+                ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
+                if (GetOpenFileNameW(&ofn)) {
+                    std::wstring cmd = L"import \"" + std::wstring(szFile) + L"\"";
+                    SHELLEXECUTEINFOW sei = { sizeof(sei) };
+                    sei.fMask = SEE_MASK_NOCLOSEPROCESS;
+                    sei.lpVerb = L"open";
+                    sei.lpFile = L"reg.exe";
+                    sei.lpParameters = cmd.c_str();
+                    sei.nShow = SW_HIDE;
+                    if (ShellExecuteExW(&sei)) {
+                        if (sei.hProcess) {
+                            WaitForSingleObject(sei.hProcess, INFINITE);
+                            CloseHandle(sei.hProcess);
+                        }
+                        LoadCustomCommands();
+                        MessageBoxW(hwnd, L"Settings imported successfully! Please reopen Settings to see all checkboxes update.", L"Restore", MB_OK | MB_ICONINFORMATION);
+                    } else {
+                        MessageBoxW(hwnd, L"Failed to import settings.", L"Error", MB_OK | MB_ICONERROR);
+                    }
                 }
             } else {
                 bool checked = SendMessage((HWND)lParam, BM_GETCHECK, 0, 0) == BST_CHECKED;
