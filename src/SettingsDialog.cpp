@@ -25,6 +25,7 @@ struct SettingItem {
     std::wstring label;
     std::wstring regValue;
     HWND hWnd = nullptr;
+    bool isCustom = false;
 };
 
 std::vector<SettingItem> g_fileSettings = {
@@ -141,6 +142,78 @@ void UpdateTabVisibility() {
     auto ToggleGroup = [&](std::vector<SettingItem>& group, bool show) {
         for (auto& item : group) ShowWindow(item.hWnd, show ? SW_SHOW : SW_HIDE);
     };
+    // Destroy custom entries dynamically created on previous views to load updated states
+    auto ClearCustomCheckboxes = [&](std::vector<SettingItem>& group) {
+        auto it = group.begin();
+        while (it != group.end()) {
+            if (it->isCustom) {
+                if (it->hWnd) DestroyWindow(it->hWnd);
+                it = group.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    };
+
+    if (sel < 3) {
+        ClearCustomCheckboxes(g_fileSettings);
+        ClearCustomCheckboxes(g_dirSettings);
+        ClearCustomCheckboxes(g_bgSettings);
+
+        HINSTANCE hInst = (HINSTANCE)GetWindowLongPtrW(g_hTab, GWLP_HINSTANCE);
+        HKEY hKey;
+        if (RegOpenKeyExW(HKEY_CURRENT_USER, REG_CUSTOM, 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
+            DWORD subKeys;
+            RegQueryInfoKeyW(hKey, NULL, NULL, NULL, &subKeys, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+            int yFile = 50 + (int)(g_fileSettings.size() * 30);
+            int yDir = 50 + (int)(g_dirSettings.size() * 30);
+            int yBg = 50 + (int)(g_bgSettings.size() * 30);
+
+            for (DWORD i = 0; i < subKeys; i++) {
+                WCHAR name[256];
+                DWORD nameSize = 256;
+                if (RegEnumKeyExW(hKey, i, name, &nameSize, NULL, NULL, NULL, NULL) == ERROR_SUCCESS) {
+                    std::wstring subPath = std::wstring(REG_CUSTOM) + L"\\" + name;
+                    DWORD f = 1, d = 1, b = 1, dwSize = sizeof(DWORD);
+                    RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), L"ShowFile", RRF_RT_REG_DWORD, NULL, &f, &dwSize);
+                    RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), L"ShowDir", RRF_RT_REG_DWORD, NULL, &d, &dwSize);
+                    RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), L"ShowBG", RRF_RT_REG_DWORD, NULL, &b, &dwSize);
+
+                    DWORD enabledFile = 1, enabledDir = 1, enabledBg = 1;
+                    RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), L"Enabled_Files", RRF_RT_REG_DWORD, NULL, &enabledFile, &dwSize);
+                    RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), L"Enabled_Directory", RRF_RT_REG_DWORD, NULL, &enabledDir, &dwSize);
+                    RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), L"Enabled_Background", RRF_RT_REG_DWORD, NULL, &enabledBg, &dwSize);
+
+                    if (sel == 0 && f) {
+                        SettingItem item = { name, std::wstring(name), nullptr, true };
+                        item.hWnd = CreateWindowW(L"BUTTON", name, WS_CHILD | BS_AUTOCHECKBOX, 30, yFile, 300, 25, GetParent(g_hTab), NULL, hInst, NULL);
+                        SendMessage(item.hWnd, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+                        SendMessage(item.hWnd, BM_SETCHECK, enabledFile ? BST_CHECKED : BST_UNCHECKED, 0);
+                        g_fileSettings.push_back(item);
+                        yFile += 30;
+                    }
+                    if (sel == 1 && d) {
+                        SettingItem item = { name, std::wstring(name), nullptr, true };
+                        item.hWnd = CreateWindowW(L"BUTTON", name, WS_CHILD | BS_AUTOCHECKBOX, 30, yDir, 300, 25, GetParent(g_hTab), NULL, hInst, NULL);
+                        SendMessage(item.hWnd, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+                        SendMessage(item.hWnd, BM_SETCHECK, enabledDir ? BST_CHECKED : BST_UNCHECKED, 0);
+                        g_dirSettings.push_back(item);
+                        yDir += 30;
+                    }
+                    if (sel == 2 && b) {
+                        SettingItem item = { name, std::wstring(name), nullptr, true };
+                        item.hWnd = CreateWindowW(L"BUTTON", name, WS_CHILD | BS_AUTOCHECKBOX, 30, yBg, 300, 25, GetParent(g_hTab), NULL, hInst, NULL);
+                        SendMessage(item.hWnd, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+                        SendMessage(item.hWnd, BM_SETCHECK, enabledBg ? BST_CHECKED : BST_UNCHECKED, 0);
+                        g_bgSettings.push_back(item);
+                        yBg += 30;
+                    }
+                }
+            }
+            RegCloseKey(hKey);
+        }
+    }
+
     ToggleGroup(g_fileSettings, sel == 0);
     ToggleGroup(g_dirSettings, sel == 1);
     ToggleGroup(g_bgSettings, sel == 2);
@@ -264,6 +337,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                             RegSetValueExW(hSubKey, L"ShowDir", 0, REG_DWORD, (BYTE*)&d, sizeof(DWORD));
                             RegSetValueExW(hSubKey, L"ShowBG", 0, REG_DWORD, (BYTE*)&b, sizeof(DWORD));
                             RegSetValueExW(hSubKey, L"RunAsAdmin", 0, REG_DWORD, (BYTE*)&admin, sizeof(DWORD));
+
+                            // Maintain or write an Enabled flag when adding or editing commands
+                            if (wmId == 100) { // Add
+                                DWORD enabled = 1;
+                                RegSetValueExW(hSubKey, L"Enabled_Files", 0, REG_DWORD, (BYTE*)&enabled, sizeof(DWORD));
+                                RegSetValueExW(hSubKey, L"Enabled_Directory", 0, REG_DWORD, (BYTE*)&enabled, sizeof(DWORD));
+                                RegSetValueExW(hSubKey, L"Enabled_Background", 0, REG_DWORD, (BYTE*)&enabled, sizeof(DWORD));
+                            }
                             RegCloseKey(hSubKey);
                         }
                         RegCloseKey(hKey);
@@ -296,10 +377,31 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             } else if (wmId == 104) { // Browse Icon
                 OPENFILENAMEW ofn = { sizeof(ofn) }; WCHAR szFile[MAX_PATH] = { 0 };
                 ofn.hwndOwner = hwnd; ofn.lpstrFile = szFile; ofn.nMaxFile = MAX_PATH;
-                ofn.lpstrFilter = L"Icons (EXE, DLL)\0*.exe;*.dll\0All Files (*.*)\0*.*\0";
+                ofn.lpstrFilter = L"Icons (EXE, DLL, ICO)\0*.exe;*.dll;*.ico\0All Files (*.*)\0*.*\0";
                 ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
                 if (GetOpenFileNameW(&ofn)) {
-                    SetWindowTextW(g_hEditIcon, szFile);
+                    // Auto-populate name field
+                    WCHAR* pName = wcsrchr(szFile, L'\\'); if (pName) pName++; else pName = szFile;
+                    std::wstring newNameStr = pName; size_t pos = newNameStr.find_last_of(L".");
+                    if (pos != std::wstring::npos) newNameStr = newNameStr.substr(0, pos);
+                    SetWindowTextW(g_hEditName, newNameStr.c_str());
+
+                    UINT numIcons = ExtractIconExW(szFile, -1, NULL, NULL, 0);
+                    if (numIcons > 1) {
+                        int iconIndex = 0;
+                        HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
+                        typedef int (WINAPI* PFN_PickIconDlg)(HWND, LPWSTR, UINT, int*);
+                        PFN_PickIconDlg pPickIconDlg = (PFN_PickIconDlg)GetProcAddress(hShell32, (LPCSTR)62);
+                        if (pPickIconDlg && pPickIconDlg(hwnd, szFile, MAX_PATH, &iconIndex)) {
+                            WCHAR finalIcon[MAX_PATH + 16];
+                            swprintf_s(finalIcon, L"%s,%d", szFile, iconIndex);
+                            SetWindowTextW(g_hEditIcon, finalIcon);
+                        } else {
+                            SetWindowTextW(g_hEditIcon, szFile);
+                        }
+                    } else {
+                        SetWindowTextW(g_hEditIcon, szFile);
+                    }
                 }
             } else if (wmId == 105) { // Backup
                 OPENFILENAMEW ofn = { sizeof(ofn) };
@@ -353,10 +455,31 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 }
             } else {
                 bool checked = SendMessage((HWND)lParam, BM_GETCHECK, 0, 0) == BST_CHECKED;
+                int currentTab = TabCtrl_GetCurSel(g_hTab);
                 auto UpdateGroup = [&](std::vector<SettingItem>& group) {
-                    for (auto& item : group) if (item.hWnd == (HWND)lParam) { SetSetting(item.regValue.c_str(), checked); break; }
+                    for (auto& item : group) {
+                        if (item.hWnd == (HWND)lParam) {
+                            if (item.isCustom) {
+                                HKEY hSubKey;
+                                std::wstring subPath = std::wstring(REG_CUSTOM) + L"\\" + item.regValue;
+                                if (RegOpenKeyExW(HKEY_CURRENT_USER, subPath.c_str(), 0, KEY_SET_VALUE, &hSubKey) == ERROR_SUCCESS) {
+                                    DWORD val = checked ? 1 : 0;
+                                    const wchar_t* valName = L"Enabled_Files";
+                                    if (currentTab == 1) valName = L"Enabled_Directory";
+                                    else if (currentTab == 2) valName = L"Enabled_Background";
+                                    RegSetValueExW(hSubKey, valName, 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
+                                    RegCloseKey(hSubKey);
+                                }
+                            } else {
+                                SetSetting(item.regValue.c_str(), checked);
+                            }
+                            break;
+                        }
+                    }
                 };
-                UpdateGroup(g_fileSettings); UpdateGroup(g_dirSettings); UpdateGroup(g_bgSettings);
+                if (currentTab == 0) UpdateGroup(g_fileSettings);
+                else if (currentTab == 1) UpdateGroup(g_dirSettings);
+                else if (currentTab == 2) UpdateGroup(g_bgSettings);
             }
         }
         return 0;
@@ -372,6 +495,18 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 }
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
+    // Single Instance Guard via a Named Mutex
+    HANDLE hMutex = CreateMutexW(NULL, TRUE, L"Local\\xToolsMenuSettingsSingleInstanceMutex");
+    if (hMutex == NULL || GetLastError() == ERROR_ALREADY_EXISTS) {
+        if (hMutex) CloseHandle(hMutex);
+        HWND hwndExisting = FindWindowW(L"SettingsDialogClass", L"xToolsMenu Settings");
+        if (hwndExisting) {
+            ShowWindow(hwndExisting, SW_RESTORE);
+            SetForegroundWindow(hwndExisting);
+        }
+        return 0;
+    }
+
     SetCurrentProcessExplicitAppUserModelID(L"xToolsMenu.Settings");
     INITCOMMONCONTROLSEX icex = { sizeof(icex), ICC_TAB_CLASSES }; InitCommonControlsEx(&icex);
     const wchar_t CLASS_NAME[] = L"SettingsDialogClass";
@@ -416,5 +551,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
             }
         }
     }
+    CloseHandle(hMutex);
     return 0;
 }

@@ -639,7 +639,7 @@ HRESULT XToolsCommandEnumerator::RuntimeClassInitialize()
             {
                 WCHAR path[MAX_PATH], args[32768], iconPath[MAX_PATH];
                 DWORD pSize = sizeof(path), aSize = sizeof(args), iSize = sizeof(iconPath);
-                DWORD showFile = 1, showDir = 1, showBG = 1, runAsAdmin = 0;
+                DWORD showFile = 1, showDir = 1, showBG = 1, runAsAdmin = 0, enabled = 1;
                 DWORD dwSize = sizeof(DWORD);
 
                 RegGetValueW(hKey, name, L"Path", RRF_RT_REG_SZ, NULL, path, &pSize);
@@ -655,7 +655,12 @@ HRESULT XToolsCommandEnumerator::RuntimeClassInitialize()
                 RegGetValueW(hKey, name, L"ShowBG", RRF_RT_REG_DWORD, NULL, &showBG, &dwSize);
                 RegGetValueW(hKey, name, L"RunAsAdmin", RRF_RT_REG_DWORD, NULL, &runAsAdmin, &dwSize);
 
-                if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, name, XToolsAction::Custom, iconPath, args, showFile, showDir, showBG, path, runAsAdmin))) _commands.push_back(cmd);
+                DWORD enabledFile = 1, enabledDir = 1, enabledBg = 1;
+                RegGetValueW(hKey, name, L"Enabled_Files", RRF_RT_REG_DWORD, NULL, &enabledFile, &dwSize);
+                RegGetValueW(hKey, name, L"Enabled_Directory", RRF_RT_REG_DWORD, NULL, &enabledDir, &dwSize);
+                RegGetValueW(hKey, name, L"Enabled_Background", RRF_RT_REG_DWORD, NULL, &enabledBg, &dwSize);
+
+                if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, name, XToolsAction::Custom, iconPath, args, showFile && enabledFile, showDir && enabledDir, showBG && enabledBg, path, runAsAdmin))) _commands.push_back(cmd);
             }
         }
         RegCloseKey(hKey);
