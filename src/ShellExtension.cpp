@@ -415,7 +415,7 @@ IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiItemArray, IBindCtx*
             {
                 std::wstring args = baseArgs;
                 ReplaceAll(args, L"%1", path);
-                ShellExecuteW(NULL, L"open", exePath.c_str(), args.c_str(), NULL, SW_SHOWNORMAL);
+                ShellExecuteW(NULL, _runAsAdmin ? L"runas" : L"open", exePath.c_str(), args.c_str(), NULL, SW_SHOWNORMAL);
             }
         }
         else
@@ -427,7 +427,7 @@ IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiItemArray, IBindCtx*
                 if (!fullArgs.empty()) fullArgs += L" ";
                 fullArgs += L"\""; fullArgs += path; fullArgs += L"\"";
             }
-            ShellExecuteW(NULL, L"open", exePath.c_str(), fullArgs.empty() ? NULL : fullArgs.c_str(), NULL, SW_SHOWNORMAL);
+            ShellExecuteW(NULL, _runAsAdmin ? L"runas" : L"open", exePath.c_str(), fullArgs.empty() ? NULL : fullArgs.c_str(), NULL, SW_SHOWNORMAL);
         }
     }
     else if (_action == XToolsAction::Terminal || _action == XToolsAction::TerminalAdmin)
@@ -635,7 +635,7 @@ HRESULT XToolsCommandEnumerator::RuntimeClassInitialize()
             {
                 WCHAR path[MAX_PATH], args[MAX_PATH], iconPath[MAX_PATH];
                 DWORD pSize = sizeof(path), aSize = sizeof(args), iSize = sizeof(iconPath);
-                DWORD showFile = 1, showDir = 1, showBG = 1;
+                DWORD showFile = 1, showDir = 1, showBG = 1, runAsAdmin = 0;
                 DWORD dwSize = sizeof(DWORD);
 
                 RegGetValueW(hKey, name, L"Path", RRF_RT_REG_SZ, NULL, path, &pSize);
@@ -649,8 +649,9 @@ HRESULT XToolsCommandEnumerator::RuntimeClassInitialize()
                 RegGetValueW(hKey, name, L"ShowFile", RRF_RT_REG_DWORD, NULL, &showFile, &dwSize);
                 RegGetValueW(hKey, name, L"ShowDir", RRF_RT_REG_DWORD, NULL, &showDir, &dwSize);
                 RegGetValueW(hKey, name, L"ShowBG", RRF_RT_REG_DWORD, NULL, &showBG, &dwSize);
+                RegGetValueW(hKey, name, L"RunAsAdmin", RRF_RT_REG_DWORD, NULL, &runAsAdmin, &dwSize);
 
-                if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, name, XToolsAction::Custom, iconPath, args, showFile, showDir, showBG, path))) _commands.push_back(cmd);
+                if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, name, XToolsAction::Custom, iconPath, args, showFile, showDir, showBG, path, runAsAdmin))) _commands.push_back(cmd);
             }
         }
         RegCloseKey(hKey);

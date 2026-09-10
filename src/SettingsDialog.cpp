@@ -28,30 +28,30 @@ struct SettingItem {
 };
 
 std::vector<SettingItem> g_fileSettings = {
-    { L"Enable Attributes", L"Files_Attributes" },
-    { L"Enable Edit With", L"Files_EditWith" },
-    { L"Enable Copy Name", L"Files_CopyName" },
-    { L"Enable Copy Path", L"Files_CopyPath" },
-    { L"Enable Take Ownership", L"Files_TakeOwnership" }
+    { L"Attributes", L"Files_Attributes" },
+    { L"Edit With", L"Files_EditWith" },
+    { L"Copy Name", L"Files_CopyName" },
+    { L"Copy Path", L"Files_CopyPath" },
+    { L"Take Ownership", L"Files_TakeOwnership" }
 };
 
 std::vector<SettingItem> g_dirSettings = {
-    { L"Enable Attributes", L"Directory_Attributes" },
-    { L"Enable Terminal", L"Directory_Terminal" },
-    { L"Enable Terminal (admin)", L"Directory_TerminalAdmin" },
-    { L"Enable System Folders", L"Directory_SystemFolders" },
-    { L"Enable Paste to File", L"Directory_PasteToFile" },
-    { L"Enable Copy Name", L"Directory_CopyName" },
-    { L"Enable Copy Path", L"Directory_CopyPath" },
-    { L"Enable Take Ownership", L"Directory_TakeOwnership" }
+    { L"Attributes", L"Directory_Attributes" },
+    { L"Terminal", L"Directory_Terminal" },
+    { L"Terminal (admin)", L"Directory_TerminalAdmin" },
+    { L"System Folders", L"Directory_SystemFolders" },
+    { L"Paste to File", L"Directory_PasteToFile" },
+    { L"Copy Name", L"Directory_CopyName" },
+    { L"Copy Path", L"Directory_CopyPath" },
+    { L"Take Ownership", L"Directory_TakeOwnership" }
 };
 
 std::vector<SettingItem> g_bgSettings = {
-    { L"Enable Attributes", L"Background_Attributes" },
-    { L"Enable Terminal", L"Background_Terminal" },
-    { L"Enable Terminal (admin)", L"Background_TerminalAdmin" },
-    { L"Enable System Folders", L"Background_SystemFolders" },
-    { L"Enable Paste to File", L"Background_PasteToFile" }
+    { L"Attributes", L"Background_Attributes" },
+    { L"Terminal", L"Background_Terminal" },
+    { L"Terminal (admin)", L"Background_TerminalAdmin" },
+    { L"System Folders", L"Background_SystemFolders" },
+    { L"Paste to File", L"Background_PasteToFile" }
 };
 
 // Custom Tab Controls
@@ -59,7 +59,7 @@ HWND g_hComboCustom = nullptr;
 HWND g_hEditName = nullptr, g_hEditPath = nullptr, g_hEditArgs = nullptr, g_hEditIcon = nullptr;
 HWND g_hBtnAdd = nullptr, g_hBtnEdit = nullptr, g_hBtnDel = nullptr, g_hBtnBrowse = nullptr, g_hBtnBrowseIcon = nullptr;
 HWND g_hStaticSelect = nullptr, g_hStaticName = nullptr, g_hStaticPath = nullptr, g_hStaticArgs = nullptr, g_hStaticIcon = nullptr;
-HWND g_hChkFile = nullptr, g_hChkDir = nullptr, g_hChkBG = nullptr;
+HWND g_hChkFile = nullptr, g_hChkDir = nullptr, g_hChkBG = nullptr, g_hChkAdmin = nullptr;
 
 bool GetSetting(const wchar_t* name) {
     DWORD value = 1, size = sizeof(value);
@@ -105,6 +105,7 @@ void SelectCustomCommand() {
         SendMessage(g_hChkFile, BM_SETCHECK, BST_CHECKED, 0);
         SendMessage(g_hChkDir, BM_SETCHECK, BST_CHECKED, 0);
         SendMessage(g_hChkBG, BM_SETCHECK, BST_CHECKED, 0);
+        SendMessage(g_hChkAdmin, BM_SETCHECK, BST_UNCHECKED, 0);
         return;
     }
 
@@ -115,7 +116,7 @@ void SelectCustomCommand() {
     HKEY hKey;
     std::wstring subPath = std::wstring(REG_CUSTOM) + L"\\" + name;
     WCHAR path[MAX_PATH] = { 0 }, args[MAX_PATH] = { 0 }, iconPath[MAX_PATH] = { 0 };
-    DWORD pSize = sizeof(path), aSize = sizeof(args), iSize = sizeof(iconPath), f = 1, d = 1, b = 1, dwSize = sizeof(DWORD);
+    DWORD pSize = sizeof(path), aSize = sizeof(args), iSize = sizeof(iconPath), f = 1, d = 1, b = 1, admin = 0, dwSize = sizeof(DWORD);
 
     RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), L"Path", RRF_RT_REG_SZ, NULL, path, &pSize);
     RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), L"Args", RRF_RT_REG_SZ, NULL, args, &aSize);
@@ -123,6 +124,7 @@ void SelectCustomCommand() {
     RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), L"ShowFile", RRF_RT_REG_DWORD, NULL, &f, &dwSize);
     RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), L"ShowDir", RRF_RT_REG_DWORD, NULL, &d, &dwSize);
     RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), L"ShowBG", RRF_RT_REG_DWORD, NULL, &b, &dwSize);
+    RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), L"RunAsAdmin", RRF_RT_REG_DWORD, NULL, &admin, &dwSize);
 
     SetWindowTextW(g_hEditPath, path);
     SetWindowTextW(g_hEditArgs, args);
@@ -130,6 +132,7 @@ void SelectCustomCommand() {
     SendMessage(g_hChkFile, BM_SETCHECK, f ? BST_CHECKED : BST_UNCHECKED, 0);
     SendMessage(g_hChkDir, BM_SETCHECK, d ? BST_CHECKED : BST_UNCHECKED, 0);
     SendMessage(g_hChkBG, BM_SETCHECK, b ? BST_CHECKED : BST_UNCHECKED, 0);
+    SendMessage(g_hChkAdmin, BM_SETCHECK, admin ? BST_CHECKED : BST_UNCHECKED, 0);
 }
 
 void UpdateTabVisibility() {
@@ -159,6 +162,7 @@ void UpdateTabVisibility() {
     ShowWindow(g_hChkFile, bCustom ? SW_SHOW : SW_HIDE);
     ShowWindow(g_hChkDir, bCustom ? SW_SHOW : SW_HIDE);
     ShowWindow(g_hChkBG, bCustom ? SW_SHOW : SW_HIDE);
+    ShowWindow(g_hChkAdmin, bCustom ? SW_SHOW : SW_HIDE);
 }
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -213,6 +217,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         g_hChkFile = CreateWindowW(L"BUTTON", L"File", WS_CHILD | BS_AUTOCHECKBOX, 80, y, 60, 25, hwnd, NULL, hInst, NULL);
         g_hChkDir = CreateWindowW(L"BUTTON", L"Directory", WS_CHILD | BS_AUTOCHECKBOX, 150, y, 90, 25, hwnd, NULL, hInst, NULL);
         g_hChkBG = CreateWindowW(L"BUTTON", L"Background", WS_CHILD | BS_AUTOCHECKBOX, 250, y, 100, 25, hwnd, NULL, hInst, NULL);
+        y += 25;
+        g_hChkAdmin = CreateWindowW(L"BUTTON", L"Run as administrator", WS_CHILD | BS_AUTOCHECKBOX, 80, y, 200, 25, hwnd, NULL, hInst, NULL);
 
         y += 50;
         g_hBtnAdd = CreateWindowW(L"BUTTON", L"Add", WS_CHILD, 40, y, 100, 30, hwnd, (HMENU)100, hInst, NULL);
@@ -238,6 +244,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 GetWindowTextW(g_hEditArgs, args, MAX_PATH);
                 GetWindowTextW(g_hEditIcon, iconPath, MAX_PATH);
                 DWORD f = (SendMessage(g_hChkFile, BM_GETCHECK, 0, 0) == BST_CHECKED), d = (SendMessage(g_hChkDir, BM_GETCHECK, 0, 0) == BST_CHECKED), b = (SendMessage(g_hChkBG, BM_GETCHECK, 0, 0) == BST_CHECKED);
+                DWORD admin = (SendMessage(g_hChkAdmin, BM_GETCHECK, 0, 0) == BST_CHECKED);
                 if (wcslen(name) > 0 && wcslen(path) > 0) {
                     HKEY hKey;
                     if (RegCreateKeyExW(HKEY_CURRENT_USER, REG_CUSTOM, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_WRITE, NULL, &hKey, NULL) == ERROR_SUCCESS) {
@@ -249,6 +256,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                             RegSetValueExW(hSubKey, L"ShowFile", 0, REG_DWORD, (BYTE*)&f, sizeof(DWORD));
                             RegSetValueExW(hSubKey, L"ShowDir", 0, REG_DWORD, (BYTE*)&d, sizeof(DWORD));
                             RegSetValueExW(hSubKey, L"ShowBG", 0, REG_DWORD, (BYTE*)&b, sizeof(DWORD));
+                            RegSetValueExW(hSubKey, L"RunAsAdmin", 0, REG_DWORD, (BYTE*)&admin, sizeof(DWORD));
                             RegCloseKey(hSubKey);
                         }
                         RegCloseKey(hKey);
