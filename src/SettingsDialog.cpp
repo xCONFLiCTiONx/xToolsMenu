@@ -127,6 +127,8 @@ LRESULT CALLBACK ViewportProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam
 
 LRESULT CALLBACK PageContentProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
     switch (uMsg) {
+    case WM_COMMAND:
+    case WM_NOTIFY:
     case WM_CTLCOLORDLG:
     case WM_CTLCOLORSTATIC:
     case WM_CTLCOLOREDIT:
@@ -668,7 +670,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     case WM_CTLCOLORDLG:
     case WM_CTLCOLORSTATIC:
     case WM_CTLCOLOREDIT:
-    case WM_CTLCOLORLISTBOX:
     case WM_CTLCOLORBTN:
     {
         if (DarkModeManager::IsDarkMode())
@@ -677,6 +678,19 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             SetTextColor(hdc, DarkModeManager::GetTextColor());
             SetBkColor(hdc, DarkModeManager::GetBackgroundColor());
             SetBkMode(hdc, TRANSPARENT);
+            return (LRESULT)DarkModeManager::GetBackgroundBrush();
+        }
+        break;
+    }
+    case WM_CTLCOLORLISTBOX:
+    {
+        if (DarkModeManager::IsDarkMode())
+        {
+            HDC hdc = (HDC)wParam;
+            SetTextColor(hdc, DarkModeManager::GetTextColor());
+            SetBkColor(hdc, DarkModeManager::GetBackgroundColor());
+            // Dropdowns need OPAQUE background to look right
+            SetBkMode(hdc, OPAQUE);
             return (LRESULT)DarkModeManager::GetBackgroundBrush();
         }
         break;

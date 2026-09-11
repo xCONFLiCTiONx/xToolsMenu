@@ -21,6 +21,9 @@ static pFlushMenuThemes _FlushMenuThemes = nullptr;
 
 static HBRUSH g_hbrBackground = NULL;
 
+// Forward declaration for subclass procs
+LRESULT CALLBACK ComboListSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData);
+
 #ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
 #define DWMWA_USE_IMMERSIVE_DARK_MODE 20
 #endif
@@ -124,6 +127,12 @@ void DarkModeManager::ApplyToControls(HWND hwnd)
                 {
                     if (_AllowDarkModeForWindow) _AllowDarkModeForWindow(cbi.hwndList, dark);
                     SetWindowTheme(cbi.hwndList, L"DarkMode_Explorer", nullptr);
+
+                    BOOL value = TRUE;
+                    DwmSetWindowAttribute(cbi.hwndList, DWMWA_USE_IMMERSIVE_DARK_MODE, &value, sizeof(value));
+
+                    // Subclass to fix the white NC area/border
+                    SetWindowSubclass(cbi.hwndList, ComboListSubclassProc, 0, 0);
                 }
                 InvalidateRect(hChild, NULL, TRUE);
             }
@@ -163,6 +172,33 @@ LRESULT CALLBACK TabSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lPa
     }
     case WM_NCDESTROY:
         RemoveWindowSubclass(hWnd, TabSubclassProc, uIdSubclass);
+        break;
+    }
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
+LRESULT CALLBACK ComboListSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData)
+{
+    switch (uMsg)
+    {
+    case WM_NCPAINT:
+    {
+        if (DarkModeManager::IsDarkMode())
+        {
+            HDC hdc = GetWindowDC(hWnd);
+            RECT rc;
+            GetWindowRect(hWnd, &rc);
+            OffsetRect(&rc, -rc.left, -rc.top);
+            // Force a dark border for the non-client area (removes white strip)
+            HBRUSH hbr = DarkModeManager::GetBackgroundBrush();
+            FrameRect(hdc, &rc, hbr);
+            ReleaseDC(hWnd, hdc);
+            return 0;
+        }
+        break;
+    }
+    case WM_NCDESTROY:
+        RemoveWindowSubclass(hWnd, ComboListSubclassProc, uIdSubclass);
         break;
     }
     return DefSubclassProc(hWnd, uMsg, wParam, lParam);
