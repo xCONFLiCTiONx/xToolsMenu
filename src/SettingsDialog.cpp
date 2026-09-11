@@ -56,6 +56,8 @@ std::vector<SettingItem> g_bgSettings = {
 };
 
 // Custom Tab Controls
+HWND g_hViewport = nullptr;
+HWND g_hPageContent = nullptr;
 HWND g_hComboCustom = nullptr;
 HWND g_hEditName = nullptr, g_hEditPath = nullptr, g_hEditArgs = nullptr, g_hEditIconLight = nullptr, g_hEditIconDark = nullptr;
 HWND g_hBtnAdd = nullptr, g_hBtnEdit = nullptr, g_hBtnDel = nullptr, g_hBtnBrowse = nullptr, g_hBtnBrowseIconLight = nullptr, g_hBtnBrowseIconDark = nullptr;
@@ -75,6 +77,88 @@ void SetSetting(const wchar_t* name, bool enabled) {
         DWORD value = enabled ? 1 : 0;
         RegSetValueExW(hKey, name, 0, REG_DWORD, (BYTE*)&value, sizeof(value));
         RegCloseKey(hKey);
+    }
+}
+
+LRESULT CALLBACK ViewportProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+    switch (uMsg) {
+    case WM_VSCROLL: {
+        SCROLLINFO si = { sizeof(si), SIF_ALL };
+        GetScrollInfo(hwnd, SB_VERT, &si);
+        int oldPos = si.nPos;
+        switch (LOWORD(wParam)) {
+        case SB_TOP: si.nPos = si.nMin; break;
+        case SB_BOTTOM: si.nPos = si.nMax; break;
+        case SB_LINEUP: si.nPos -= 20; break;
+        case SB_LINEDOWN: si.nPos += 20; break;
+        case SB_PAGEUP: si.nPos -= si.nPage; break;
+        case SB_PAGEDOWN: si.nPos += si.nPage; break;
+        case SB_THUMBTRACK: si.nPos = si.nTrackPos; break;
+        }
+        si.fMask = SIF_POS;
+        SetScrollInfo(hwnd, SB_VERT, &si, TRUE);
+        GetScrollInfo(hwnd, SB_VERT, &si);
+        if (si.nPos != oldPos) {
+            SetWindowPos(g_hPageContent, NULL, 0, -si.nPos, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+        }
+        return 0;
+    }
+    case WM_MOUSEWHEEL:
+        SendMessage(hwnd, WM_VSCROLL, (short)HIWORD(wParam) > 0 ? SB_LINEUP : SB_LINEDOWN, 0);
+        return 0;
+    case WM_COMMAND:
+    case WM_NOTIFY:
+    case WM_CTLCOLORDLG:
+    case WM_CTLCOLORSTATIC:
+    case WM_CTLCOLOREDIT:
+    case WM_CTLCOLORLISTBOX:
+    case WM_CTLCOLORBTN:
+        return SendMessage(GetParent(hwnd), uMsg, wParam, lParam);
+    case WM_ERASEBKGND:
+        if (DarkModeManager::IsDarkMode()) {
+            RECT rc; GetClientRect(hwnd, &rc);
+            FillRect((HDC)wParam, &rc, DarkModeManager::GetBackgroundBrush());
+            return TRUE;
+        }
+        break;
+    }
+    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+}
+
+LRESULT CALLBACK PageContentProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+    switch (uMsg) {
+    case WM_CTLCOLORDLG:
+    case WM_CTLCOLORSTATIC:
+    case WM_CTLCOLOREDIT:
+    case WM_CTLCOLORLISTBOX:
+    case WM_CTLCOLORBTN:
+        return SendMessage(GetParent(hwnd), uMsg, wParam, lParam);
+    case WM_ERASEBKGND:
+        if (DarkModeManager::IsDarkMode()) {
+            RECT rc; GetClientRect(hwnd, &rc);
+            FillRect((HDC)wParam, &rc, DarkModeManager::GetBackgroundBrush());
+            return TRUE;
+        }
+        break;
+    }
+    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+}
+
+void UpdateScroll(int totalHeight) {
+    RECT rc; GetClientRect(g_hViewport, &rc);
+    SCROLLINFO si = { sizeof(si) };
+    si.fMask = SIF_RANGE | SIF_PAGE;
+    si.nMin = 0; si.nMax = totalHeight; si.nPage = rc.bottom;
+    SetScrollInfo(g_hViewport, SB_VERT, &si, TRUE);
+
+    // Show/Hide scrollbar based on content height
+    ShowScrollBar(g_hViewport, SB_VERT, totalHeight > rc.bottom);
+
+    int pos = GetScrollPos(g_hViewport, SB_VERT);
+    if (pos > si.nMax - (int)si.nPage) {
+        int newPos = max(0, si.nMax - (int)si.nPage);
+        SetScrollPos(g_hViewport, SB_VERT, newPos, TRUE);
+        SetWindowPos(g_hPageContent, NULL, 0, -newPos, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
     }
 }
 
@@ -147,6 +231,11 @@ void SelectCustomCommand() {
 
 void UpdateTabVisibility() {
     int sel = TabCtrl_GetCurSel(g_hTab);
+
+    // Reset scroll
+    SetScrollPos(g_hViewport, SB_VERT, 0, TRUE);
+    SetWindowPos(g_hPageContent, NULL, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+
     auto ToggleGroup = [&](std::vector<SettingItem>& group, bool show) {
         for (auto& item : group) ShowWindow(item.hWnd, show ? SW_SHOW : SW_HIDE);
     };
@@ -163,6 +252,7 @@ void UpdateTabVisibility() {
         }
     };
 
+    int maxY = 0;
     if (sel < 3) {
         ClearCustomCheckboxes(g_fileSettings);
         ClearCustomCheckboxes(g_dirSettings);
@@ -173,9 +263,9 @@ void UpdateTabVisibility() {
         if (RegOpenKeyExW(HKEY_CURRENT_USER, REG_CUSTOM, 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
             DWORD subKeys;
             RegQueryInfoKeyW(hKey, NULL, NULL, NULL, &subKeys, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
-            int yFile = 50 + (int)(g_fileSettings.size() * 30);
-            int yDir = 50 + (int)(g_dirSettings.size() * 30);
-            int yBg = 50 + (int)(g_bgSettings.size() * 30);
+            int yFile = 10 + (int)(g_fileSettings.size() * 30);
+            int yDir = 10 + (int)(g_dirSettings.size() * 30);
+            int yBg = 10 + (int)(g_bgSettings.size() * 30);
 
             for (DWORD i = 0; i < subKeys; i++) {
                 WCHAR name[256];
@@ -194,7 +284,7 @@ void UpdateTabVisibility() {
 
                     if (sel == 0 && f) {
                         SettingItem item = { name, std::wstring(name), nullptr, true };
-                        item.hWnd = CreateWindowW(L"BUTTON", name, WS_CHILD | BS_AUTOCHECKBOX, 30, yFile, 300, 25, GetParent(g_hTab), NULL, hInst, NULL);
+                        item.hWnd = CreateWindowW(L"BUTTON", name, WS_CHILD | BS_AUTOCHECKBOX, 20, yFile, 300, 25, g_hPageContent, NULL, hInst, NULL);
                         SendMessage(item.hWnd, WM_SETFONT, (WPARAM)g_hFont, TRUE);
                         SendMessage(item.hWnd, BM_SETCHECK, enabledFile ? BST_CHECKED : BST_UNCHECKED, 0);
                         g_fileSettings.push_back(item);
@@ -202,7 +292,7 @@ void UpdateTabVisibility() {
                     }
                     if (sel == 1 && d) {
                         SettingItem item = { name, std::wstring(name), nullptr, true };
-                        item.hWnd = CreateWindowW(L"BUTTON", name, WS_CHILD | BS_AUTOCHECKBOX, 30, yDir, 300, 25, GetParent(g_hTab), NULL, hInst, NULL);
+                        item.hWnd = CreateWindowW(L"BUTTON", name, WS_CHILD | BS_AUTOCHECKBOX, 20, yDir, 300, 25, g_hPageContent, NULL, hInst, NULL);
                         SendMessage(item.hWnd, WM_SETFONT, (WPARAM)g_hFont, TRUE);
                         SendMessage(item.hWnd, BM_SETCHECK, enabledDir ? BST_CHECKED : BST_UNCHECKED, 0);
                         g_dirSettings.push_back(item);
@@ -210,7 +300,7 @@ void UpdateTabVisibility() {
                     }
                     if (sel == 2 && b) {
                         SettingItem item = { name, std::wstring(name), nullptr, true };
-                        item.hWnd = CreateWindowW(L"BUTTON", name, WS_CHILD | BS_AUTOCHECKBOX, 30, yBg, 300, 25, GetParent(g_hTab), NULL, hInst, NULL);
+                        item.hWnd = CreateWindowW(L"BUTTON", name, WS_CHILD | BS_AUTOCHECKBOX, 20, yBg, 300, 25, g_hPageContent, NULL, hInst, NULL);
                         SendMessage(item.hWnd, WM_SETFONT, (WPARAM)g_hFont, TRUE);
                         SendMessage(item.hWnd, BM_SETCHECK, enabledBg ? BST_CHECKED : BST_UNCHECKED, 0);
                         g_bgSettings.push_back(item);
@@ -219,9 +309,15 @@ void UpdateTabVisibility() {
                 }
             }
             RegCloseKey(hKey);
+            if (sel == 0) maxY = yFile;
+            else if (sel == 1) maxY = yDir;
+            else if (sel == 2) maxY = yBg;
         }
-        DarkModeManager::ApplyToControls(GetParent(g_hTab));
+        DarkModeManager::ApplyToControls(g_hPageContent);
+    } else {
+        maxY = 340;
     }
+    UpdateScroll(maxY);
 
     ToggleGroup(g_fileSettings, sel == 0);
     ToggleGroup(g_dirSettings, sel == 1);
@@ -267,6 +363,13 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         DarkModeManager::FixTabControl(g_hTab);
         SendMessage(g_hTab, WM_SETFONT, (WPARAM)g_hFont, TRUE);
 
+        g_hViewport = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_CLIPCHILDREN, 12, 42, 376, 375, hwnd, NULL, hInst, NULL);
+        SetWindowSubclass(g_hViewport, ViewportProc, 0, 0);
+        if (DarkModeManager::IsDarkMode()) SetWindowTheme(g_hViewport, L"DarkMode_Explorer", NULL);
+
+        g_hPageContent = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE, 0, 0, 376, 1000, g_hViewport, NULL, hInst, NULL);
+        SetWindowSubclass(g_hPageContent, PageContentProc, 0, 0);
+
         TCITEMW tie = { TCIF_TEXT };
         tie.pszText = (LPWSTR)L"Files"; TabCtrl_InsertItem(g_hTab, 0, &tie);
         tie.pszText = (LPWSTR)L"Directory"; TabCtrl_InsertItem(g_hTab, 1, &tie);
@@ -274,9 +377,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         tie.pszText = (LPWSTR)L"Custom"; TabCtrl_InsertItem(g_hTab, 3, &tie);
 
         auto CreateCheckboxes = [&](std::vector<SettingItem>& group) {
-            int y = 50;
+            int y = 10;
             for (auto& item : group) {
-                item.hWnd = CreateWindowW(L"BUTTON", item.label.c_str(), WS_CHILD | BS_AUTOCHECKBOX, 30, y, 300, 25, hwnd, NULL, hInst, NULL);
+                item.hWnd = CreateWindowW(L"BUTTON", item.label.c_str(), WS_CHILD | BS_AUTOCHECKBOX, 20, y, 300, 25, g_hPageContent, NULL, hInst, NULL);
                 SendMessage(item.hWnd, WM_SETFONT, (WPARAM)g_hFont, TRUE);
                 SendMessage(item.hWnd, BM_SETCHECK, GetSetting(item.regValue.c_str()) ? BST_CHECKED : BST_UNCHECKED, 0);
                 y += 30;
@@ -286,42 +389,46 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         CreateCheckboxes(g_dirSettings);
         CreateCheckboxes(g_bgSettings);
 
-        int y = 50;
-        g_hStaticSelect = CreateWindowW(L"STATIC", L"Select Entry:", WS_CHILD, 25, y, 100, 25, hwnd, NULL, hInst, NULL);
-        g_hComboCustom = CreateWindowW(WC_COMBOBOXW, L"", WS_CHILD | CBS_DROPDOWNLIST | WS_VSCROLL, 130, y - 3, 220, 200, hwnd, (HMENU)200, hInst, NULL);
-        y += 40;
-        g_hStaticName = CreateWindowW(L"STATIC", L"Name:", WS_CHILD, 25, y, 50, 25, hwnd, NULL, hInst, NULL);
-        g_hEditName = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, 80, y, 200, 25, hwnd, NULL, hInst, NULL);
-        y += 35;
-        g_hStaticPath = CreateWindowW(L"STATIC", L"Path:", WS_CHILD, 25, y, 50, 25, hwnd, NULL, hInst, NULL);
-        g_hEditPath = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, 80, y, 240, 25, hwnd, NULL, hInst, NULL);
-        g_hBtnBrowse = CreateWindowW(L"BUTTON", L"...", WS_CHILD, 325, y, 35, 25, hwnd, (HMENU)102, hInst, NULL);
-        y += 35;
-        g_hStaticArgs = CreateWindowW(L"STATIC", L"Args:", WS_CHILD, 25, y, 50, 25, hwnd, NULL, hInst, NULL);
-        g_hEditArgs = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, 80, y, 280, 25, hwnd, NULL, hInst, NULL);
-        y += 35;
-        g_hStaticIconLight = CreateWindowW(L"STATIC", L"Light Icon:", WS_CHILD, 25, y, 70, 25, hwnd, NULL, hInst, NULL);
-        g_hEditIconLight = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, 100, y, 220, 25, hwnd, NULL, hInst, NULL);
-        g_hBtnBrowseIconLight = CreateWindowW(L"BUTTON", L"...", WS_CHILD, 325, y, 35, 25, hwnd, (HMENU)104, hInst, NULL);
-        y += 35;
-        g_hStaticIconDark = CreateWindowW(L"STATIC", L"Dark Icon:", WS_CHILD, 25, y, 70, 25, hwnd, NULL, hInst, NULL);
-        g_hEditIconDark = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, 100, y, 220, 25, hwnd, NULL, hInst, NULL);
-        g_hBtnBrowseIconDark = CreateWindowW(L"BUTTON", L"...", WS_CHILD, 325, y, 35, 25, hwnd, (HMENU)107, hInst, NULL);
-        y += 35;
-        g_hChkFile = CreateWindowW(L"BUTTON", L"File", WS_CHILD | BS_AUTOCHECKBOX, 80, y, 60, 25, hwnd, NULL, hInst, NULL);
-        g_hChkDir = CreateWindowW(L"BUTTON", L"Directory", WS_CHILD | BS_AUTOCHECKBOX, 150, y, 90, 25, hwnd, NULL, hInst, NULL);
-        g_hChkBG = CreateWindowW(L"BUTTON", L"Background", WS_CHILD | BS_AUTOCHECKBOX, 250, y, 100, 25, hwnd, NULL, hInst, NULL);
-        y += 25;
-        g_hChkAdmin = CreateWindowW(L"BUTTON", L"Run as administrator", WS_CHILD | BS_AUTOCHECKBOX, 80, y, 200, 25, hwnd, NULL, hInst, NULL);
+        int y = 10;
+        int labelX = 15, inputX = 90, fieldW = 250;
 
-        y += 50;
-        g_hBtnAdd = CreateWindowW(L"BUTTON", L"Add", WS_CHILD, 40, y, 100, 30, hwnd, (HMENU)100, hInst, NULL);
-        g_hBtnEdit = CreateWindowW(L"BUTTON", L"Edit", WS_CHILD, 150, y, 100, 30, hwnd, (HMENU)103, hInst, NULL);
-        g_hBtnDel = CreateWindowW(L"BUTTON", L"Delete", WS_CHILD, 260, y, 100, 30, hwnd, (HMENU)101, hInst, NULL);
+        g_hStaticSelect = CreateWindowW(L"STATIC", L"Select Entry:", WS_CHILD, labelX, y + 3, 75, 20, g_hPageContent, NULL, hInst, NULL);
+        g_hComboCustom = CreateWindowW(WC_COMBOBOXW, L"", WS_CHILD | CBS_DROPDOWNLIST | WS_VSCROLL, inputX, y, fieldW, 200, g_hPageContent, (HMENU)200, hInst, NULL);
+        y += 32;
+        g_hStaticName = CreateWindowW(L"STATIC", L"Name:", WS_CHILD, labelX, y + 3, 75, 20, g_hPageContent, NULL, hInst, NULL);
+        g_hEditName = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, inputX, y, fieldW, 25, g_hPageContent, NULL, hInst, NULL);
+        y += 28;
+        g_hStaticPath = CreateWindowW(L"STATIC", L"Path:", WS_CHILD, labelX, y + 3, 75, 20, g_hPageContent, NULL, hInst, NULL);
+        g_hEditPath = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, inputX, y, fieldW - 40, 25, g_hPageContent, NULL, hInst, NULL);
+        g_hBtnBrowse = CreateWindowW(L"BUTTON", L"...", WS_CHILD, inputX + fieldW - 35, y, 35, 25, g_hPageContent, (HMENU)102, hInst, NULL);
+        y += 28;
+        g_hStaticArgs = CreateWindowW(L"STATIC", L"Args:", WS_CHILD, labelX, y + 3, 75, 20, g_hPageContent, NULL, hInst, NULL);
+        g_hEditArgs = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, inputX, y, fieldW, 25, g_hPageContent, NULL, hInst, NULL);
+        y += 28;
+        g_hStaticIconLight = CreateWindowW(L"STATIC", L"Light Icon:", WS_CHILD, labelX, y + 3, 75, 20, g_hPageContent, NULL, hInst, NULL);
+        g_hEditIconLight = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, inputX, y, fieldW - 40, 25, g_hPageContent, NULL, hInst, NULL);
+        g_hBtnBrowseIconLight = CreateWindowW(L"BUTTON", L"...", WS_CHILD, inputX + fieldW - 35, y, 35, 25, g_hPageContent, (HMENU)104, hInst, NULL);
+        y += 28;
+        g_hStaticIconDark = CreateWindowW(L"STATIC", L"Dark Icon:", WS_CHILD, labelX, y + 3, 75, 20, g_hPageContent, NULL, hInst, NULL);
+        g_hEditIconDark = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, inputX, y, fieldW - 40, 25, g_hPageContent, NULL, hInst, NULL);
+        g_hBtnBrowseIconDark = CreateWindowW(L"BUTTON", L"...", WS_CHILD, inputX + fieldW - 35, y, 35, 25, g_hPageContent, (HMENU)107, hInst, NULL);
+        y += 28;
+        g_hChkFile = CreateWindowW(L"BUTTON", L"File", WS_CHILD | BS_AUTOCHECKBOX, inputX, y, 55, 25, g_hPageContent, NULL, hInst, NULL);
+        g_hChkDir = CreateWindowW(L"BUTTON", L"Directory", WS_CHILD | BS_AUTOCHECKBOX, inputX + 65, y, 85, 25, g_hPageContent, NULL, hInst, NULL);
+        g_hChkBG = CreateWindowW(L"BUTTON", L"Background", WS_CHILD | BS_AUTOCHECKBOX, inputX + 155, y, 95, 25, g_hPageContent, NULL, hInst, NULL);
+        y += 22;
+        g_hChkAdmin = CreateWindowW(L"BUTTON", L"Run as administrator", WS_CHILD | BS_AUTOCHECKBOX, inputX, y, 200, 25, g_hPageContent, NULL, hInst, NULL);
 
-        y += 40;
-        g_hBtnBackup = CreateWindowW(L"BUTTON", L"Backup Settings...", WS_CHILD, 40, y, 150, 25, hwnd, (HMENU)105, hInst, NULL);
-        g_hBtnRestore = CreateWindowW(L"BUTTON", L"Restore Settings...", WS_CHILD, 210, y, 150, 25, hwnd, (HMENU)106, hInst, NULL);
+        y += 35;
+        int btnW = 100;
+        g_hBtnAdd = CreateWindowW(L"BUTTON", L"Add", WS_CHILD, 25, y, btnW, 30, g_hPageContent, (HMENU)100, hInst, NULL);
+        g_hBtnEdit = CreateWindowW(L"BUTTON", L"Edit", WS_CHILD, 137, y, btnW, 30, g_hPageContent, (HMENU)103, hInst, NULL);
+        g_hBtnDel = CreateWindowW(L"BUTTON", L"Delete", WS_CHILD, 249, y, btnW, 30, g_hPageContent, (HMENU)101, hInst, NULL);
+
+        y += 35;
+        int longBtnW = 155;
+        g_hBtnBackup = CreateWindowW(L"BUTTON", L"Backup Settings...", WS_CHILD, 25, y, longBtnW, 30, g_hPageContent, (HMENU)105, hInst, NULL);
+        g_hBtnRestore = CreateWindowW(L"BUTTON", L"Restore Settings...", WS_CHILD, 194, y, longBtnW, 30, g_hPageContent, (HMENU)106, hInst, NULL);
 
         EnumChildWindows(hwnd, [](HWND hChild, LPARAM lp) -> BOOL {
             SendMessage(hChild, WM_SETFONT, (WPARAM)g_hFont, TRUE);

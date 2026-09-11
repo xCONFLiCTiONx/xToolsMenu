@@ -93,7 +93,6 @@ void DarkModeManager::ApplyToControls(HWND hwnd)
         // Apply dark theme to standard controls
         if (_wcsicmp(className, L"BUTTON") == 0 ||
             _wcsicmp(className, L"EDIT") == 0 ||
-            _wcsicmp(className, L"STATIC") == 0 ||
             _wcsicmp(className, WC_LISTVIEWW) == 0 ||
             _wcsicmp(className, WC_TREEVIEWW) == 0 ||
             _wcsicmp(className, WC_TABCONTROLW) == 0 ||
