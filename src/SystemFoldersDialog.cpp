@@ -28,7 +28,7 @@ std::vector<FolderInfo> g_folders = {
     { L"ProgramData", CSIDL_COMMON_APPDATA, L"" }
 };
 
-void OpenFolder(int index) {
+void OpenFolder(HWND hwnd, int index) {
     std::wstring path;
     if (g_folders[index].csidl != -1) {
         WCHAR szPath[MAX_PATH];
@@ -42,7 +42,8 @@ void OpenFolder(int index) {
     }
 
     if (!path.empty()) {
-        ShellExecuteW(NULL, L"open", path.c_str(), NULL, NULL, SW_SHOWNORMAL);
+        AllowSetForegroundWindow(ASFW_ANY);
+        ShellExecuteW(hwnd, L"open", path.c_str(), NULL, NULL, SW_SHOWNORMAL);
     }
 }
 
@@ -80,7 +81,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     case WM_COMMAND: {
         int id = LOWORD(wParam);
         if (id >= 0 && id < g_folders.size()) {
-            OpenFolder(id);
+            OpenFolder(hwnd, id);
             PostQuitMessage(0);
         }
         return 0;

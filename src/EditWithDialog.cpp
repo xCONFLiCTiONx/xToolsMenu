@@ -111,7 +111,7 @@ void FindEditors() {
     AddEditor(L"Notepad", szNotepad);
 }
 
-void OpenWithEditor(int index) {
+void OpenWithEditor(HWND hwnd, int index) {
     if (index < 0 || index >= (int)g_editors.size()) return;
 
     std::wstring params;
@@ -122,7 +122,7 @@ void OpenWithEditor(int index) {
     // Allow the launched process to take the foreground
     AllowSetForegroundWindow(ASFW_ANY);
 
-    ShellExecuteW(NULL, L"open", g_editors[index].path.c_str(), params.empty() ? NULL : params.c_str(), NULL, SW_SHOWNORMAL);
+    ShellExecuteW(hwnd, L"open", g_editors[index].path.c_str(), params.empty() ? NULL : params.c_str(), NULL, SW_SHOWNORMAL);
 }
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -159,7 +159,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     case WM_COMMAND: {
         int id = LOWORD(wParam);
         if (id >= 0 && id < (int)g_editors.size()) {
-            OpenWithEditor(id);
+            OpenWithEditor(hwnd, id);
             PostQuitMessage(0);
         }
         return 0;

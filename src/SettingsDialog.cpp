@@ -57,9 +57,9 @@ std::vector<SettingItem> g_bgSettings = {
 
 // Custom Tab Controls
 HWND g_hComboCustom = nullptr;
-HWND g_hEditName = nullptr, g_hEditPath = nullptr, g_hEditArgs = nullptr, g_hEditIcon = nullptr;
-HWND g_hBtnAdd = nullptr, g_hBtnEdit = nullptr, g_hBtnDel = nullptr, g_hBtnBrowse = nullptr, g_hBtnBrowseIcon = nullptr;
-HWND g_hStaticSelect = nullptr, g_hStaticName = nullptr, g_hStaticPath = nullptr, g_hStaticArgs = nullptr, g_hStaticIcon = nullptr;
+HWND g_hEditName = nullptr, g_hEditPath = nullptr, g_hEditArgs = nullptr, g_hEditIconLight = nullptr, g_hEditIconDark = nullptr;
+HWND g_hBtnAdd = nullptr, g_hBtnEdit = nullptr, g_hBtnDel = nullptr, g_hBtnBrowse = nullptr, g_hBtnBrowseIconLight = nullptr, g_hBtnBrowseIconDark = nullptr;
+HWND g_hStaticSelect = nullptr, g_hStaticName = nullptr, g_hStaticPath = nullptr, g_hStaticArgs = nullptr, g_hStaticIconLight = nullptr, g_hStaticIconDark = nullptr;
 HWND g_hChkFile = nullptr, g_hChkDir = nullptr, g_hChkBG = nullptr, g_hChkAdmin = nullptr;
 HWND g_hBtnBackup = nullptr, g_hBtnRestore = nullptr;
 
@@ -103,7 +103,8 @@ void SelectCustomCommand() {
         SetWindowTextW(g_hEditName, L"");
         SetWindowTextW(g_hEditPath, L"");
         SetWindowTextW(g_hEditArgs, L"");
-        SetWindowTextW(g_hEditIcon, L"");
+        SetWindowTextW(g_hEditIconLight, L"");
+        SetWindowTextW(g_hEditIconDark, L"");
         SendMessage(g_hChkFile, BM_SETCHECK, BST_CHECKED, 0);
         SendMessage(g_hChkDir, BM_SETCHECK, BST_CHECKED, 0);
         SendMessage(g_hChkBG, BM_SETCHECK, BST_CHECKED, 0);
@@ -117,20 +118,27 @@ void SelectCustomCommand() {
 
     HKEY hKey;
     std::wstring subPath = std::wstring(REG_CUSTOM) + L"\\" + name;
-    WCHAR path[MAX_PATH] = { 0 }, args[32768] = { 0 }, iconPath[MAX_PATH] = { 0 };
-    DWORD pSize = sizeof(path), aSize = sizeof(args), iSize = sizeof(iconPath), f = 1, d = 1, b = 1, admin = 0, dwSize = sizeof(DWORD);
+    WCHAR path[MAX_PATH] = { 0 }, args[32768] = { 0 }, iconPath[MAX_PATH] = { 0 }, iconPathLight[MAX_PATH] = { 0 }, iconPathDark[MAX_PATH] = { 0 };
+    DWORD pSize = sizeof(path), aSize = sizeof(args), iSize = sizeof(iconPath), iLightSize = sizeof(iconPathLight), iDarkSize = sizeof(iconPathDark);
+    DWORD f = 1, d = 1, b = 1, admin = 0, dwSize = sizeof(DWORD);
 
     RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), L"Path", RRF_RT_REG_SZ, NULL, path, &pSize);
     RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), L"Args", RRF_RT_REG_SZ, NULL, args, &aSize);
     RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), L"IconPath", RRF_RT_REG_SZ, NULL, iconPath, &iSize);
+    RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), L"IconPath_Light", RRF_RT_REG_SZ, NULL, iconPathLight, &iLightSize);
+    RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), L"IconPath_Dark", RRF_RT_REG_SZ, NULL, iconPathDark, &iDarkSize);
     RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), L"ShowFile", RRF_RT_REG_DWORD, NULL, &f, &dwSize);
     RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), L"ShowDir", RRF_RT_REG_DWORD, NULL, &d, &dwSize);
     RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), L"ShowBG", RRF_RT_REG_DWORD, NULL, &b, &dwSize);
     RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), L"RunAsAdmin", RRF_RT_REG_DWORD, NULL, &admin, &dwSize);
 
+    if (wcslen(iconPathLight) == 0 && wcslen(iconPath) > 0) wcscpy_s(iconPathLight, iconPath);
+    if (wcslen(iconPathDark) == 0 && wcslen(iconPath) > 0) wcscpy_s(iconPathDark, iconPath);
+
     SetWindowTextW(g_hEditPath, path);
     SetWindowTextW(g_hEditArgs, args);
-    SetWindowTextW(g_hEditIcon, iconPath);
+    SetWindowTextW(g_hEditIconLight, iconPathLight);
+    SetWindowTextW(g_hEditIconDark, iconPathDark);
     SendMessage(g_hChkFile, BM_SETCHECK, f ? BST_CHECKED : BST_UNCHECKED, 0);
     SendMessage(g_hChkDir, BM_SETCHECK, d ? BST_CHECKED : BST_UNCHECKED, 0);
     SendMessage(g_hChkBG, BM_SETCHECK, b ? BST_CHECKED : BST_UNCHECKED, 0);
@@ -223,17 +231,20 @@ void UpdateTabVisibility() {
     ShowWindow(g_hEditName, bCustom ? SW_SHOW : SW_HIDE);
     ShowWindow(g_hEditPath, bCustom ? SW_SHOW : SW_HIDE);
     ShowWindow(g_hEditArgs, bCustom ? SW_SHOW : SW_HIDE);
-    ShowWindow(g_hEditIcon, bCustom ? SW_SHOW : SW_HIDE);
+    ShowWindow(g_hEditIconLight, bCustom ? SW_SHOW : SW_HIDE);
+    ShowWindow(g_hEditIconDark, bCustom ? SW_SHOW : SW_HIDE);
     ShowWindow(g_hBtnAdd, bCustom ? SW_SHOW : SW_HIDE);
     ShowWindow(g_hBtnEdit, bCustom ? SW_SHOW : SW_HIDE);
     ShowWindow(g_hBtnDel, bCustom ? SW_SHOW : SW_HIDE);
     ShowWindow(g_hBtnBrowse, bCustom ? SW_SHOW : SW_HIDE);
-    ShowWindow(g_hBtnBrowseIcon, bCustom ? SW_SHOW : SW_HIDE);
+    ShowWindow(g_hBtnBrowseIconLight, bCustom ? SW_SHOW : SW_HIDE);
+    ShowWindow(g_hBtnBrowseIconDark, bCustom ? SW_SHOW : SW_HIDE);
     ShowWindow(g_hStaticSelect, bCustom ? SW_SHOW : SW_HIDE);
     ShowWindow(g_hStaticName, bCustom ? SW_SHOW : SW_HIDE);
     ShowWindow(g_hStaticPath, bCustom ? SW_SHOW : SW_HIDE);
     ShowWindow(g_hStaticArgs, bCustom ? SW_SHOW : SW_HIDE);
-    ShowWindow(g_hStaticIcon, bCustom ? SW_SHOW : SW_HIDE);
+    ShowWindow(g_hStaticIconLight, bCustom ? SW_SHOW : SW_HIDE);
+    ShowWindow(g_hStaticIconDark, bCustom ? SW_SHOW : SW_HIDE);
     ShowWindow(g_hChkFile, bCustom ? SW_SHOW : SW_HIDE);
     ShowWindow(g_hChkDir, bCustom ? SW_SHOW : SW_HIDE);
     ShowWindow(g_hChkBG, bCustom ? SW_SHOW : SW_HIDE);
@@ -252,7 +263,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         ReleaseDC(hwnd, hdc);
         g_hFont = CreateFontW(logHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
 
-        g_hTab = CreateWindowW(WC_TABCONTROLW, L"", WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | TCS_OWNERDRAWFIXED, 10, 10, 380, 370, hwnd, NULL, hInst, NULL);
+        g_hTab = CreateWindowW(WC_TABCONTROLW, L"", WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | TCS_OWNERDRAWFIXED, 10, 10, 380, 410, hwnd, NULL, hInst, NULL);
         DarkModeManager::FixTabControl(g_hTab);
         SendMessage(g_hTab, WM_SETFONT, (WPARAM)g_hFont, TRUE);
 
@@ -289,9 +300,13 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         g_hStaticArgs = CreateWindowW(L"STATIC", L"Args:", WS_CHILD, 25, y, 50, 25, hwnd, NULL, hInst, NULL);
         g_hEditArgs = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, 80, y, 280, 25, hwnd, NULL, hInst, NULL);
         y += 35;
-        g_hStaticIcon = CreateWindowW(L"STATIC", L"Icon:", WS_CHILD, 25, y, 50, 25, hwnd, NULL, hInst, NULL);
-        g_hEditIcon = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, 80, y, 240, 25, hwnd, NULL, hInst, NULL);
-        g_hBtnBrowseIcon = CreateWindowW(L"BUTTON", L"...", WS_CHILD, 325, y, 35, 25, hwnd, (HMENU)104, hInst, NULL);
+        g_hStaticIconLight = CreateWindowW(L"STATIC", L"Light Icon:", WS_CHILD, 25, y, 70, 25, hwnd, NULL, hInst, NULL);
+        g_hEditIconLight = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, 100, y, 220, 25, hwnd, NULL, hInst, NULL);
+        g_hBtnBrowseIconLight = CreateWindowW(L"BUTTON", L"...", WS_CHILD, 325, y, 35, 25, hwnd, (HMENU)104, hInst, NULL);
+        y += 35;
+        g_hStaticIconDark = CreateWindowW(L"STATIC", L"Dark Icon:", WS_CHILD, 25, y, 70, 25, hwnd, NULL, hInst, NULL);
+        g_hEditIconDark = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, 100, y, 220, 25, hwnd, NULL, hInst, NULL);
+        g_hBtnBrowseIconDark = CreateWindowW(L"BUTTON", L"...", WS_CHILD, 325, y, 35, 25, hwnd, (HMENU)107, hInst, NULL);
         y += 35;
         g_hChkFile = CreateWindowW(L"BUTTON", L"File", WS_CHILD | BS_AUTOCHECKBOX, 80, y, 60, 25, hwnd, NULL, hInst, NULL);
         g_hChkDir = CreateWindowW(L"BUTTON", L"Directory", WS_CHILD | BS_AUTOCHECKBOX, 150, y, 90, 25, hwnd, NULL, hInst, NULL);
@@ -321,11 +336,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         if (wmId == 200 && HIWORD(wParam) == CBN_SELCHANGE) { SelectCustomCommand(); return 0; }
         if (HIWORD(wParam) == BN_CLICKED) {
             if (wmId == 100 || wmId == 103) { // Add or Edit
-                WCHAR name[256], path[MAX_PATH], args[32768], iconPath[MAX_PATH];
+                WCHAR name[256], path[MAX_PATH], args[32768], iconPathLight[MAX_PATH], iconPathDark[MAX_PATH];
                 GetWindowTextW(g_hEditName, name, 256);
                 GetWindowTextW(g_hEditPath, path, MAX_PATH);
                 GetWindowTextW(g_hEditArgs, args, 32768);
-                GetWindowTextW(g_hEditIcon, iconPath, MAX_PATH);
+                GetWindowTextW(g_hEditIconLight, iconPathLight, MAX_PATH);
+                GetWindowTextW(g_hEditIconDark, iconPathDark, MAX_PATH);
                 DWORD f = (SendMessage(g_hChkFile, BM_GETCHECK, 0, 0) == BST_CHECKED), d = (SendMessage(g_hChkDir, BM_GETCHECK, 0, 0) == BST_CHECKED), b = (SendMessage(g_hChkBG, BM_GETCHECK, 0, 0) == BST_CHECKED);
                 DWORD admin = (SendMessage(g_hChkAdmin, BM_GETCHECK, 0, 0) == BST_CHECKED);
                 if (wcslen(name) > 0 && wcslen(path) > 0) {
@@ -335,7 +351,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                         if (RegCreateKeyExW(hKey, name, 0, NULL, REG_OPTION_NON_VOLATILE, KEY_SET_VALUE, NULL, &hSubKey, NULL) == ERROR_SUCCESS) {
                             RegSetValueExW(hSubKey, L"Path", 0, REG_SZ, (BYTE*)path, (DWORD)(wcslen(path) + 1) * sizeof(wchar_t));
                             RegSetValueExW(hSubKey, L"Args", 0, REG_SZ, (BYTE*)args, (DWORD)(wcslen(args) + 1) * sizeof(wchar_t));
-                            RegSetValueExW(hSubKey, L"IconPath", 0, REG_SZ, (BYTE*)iconPath, (DWORD)(wcslen(iconPath) + 1) * sizeof(wchar_t));
+                            RegSetValueExW(hSubKey, L"IconPath", 0, REG_SZ, (BYTE*)iconPathLight, (DWORD)(wcslen(iconPathLight) + 1) * sizeof(wchar_t));
+                            RegSetValueExW(hSubKey, L"IconPath_Light", 0, REG_SZ, (BYTE*)iconPathLight, (DWORD)(wcslen(iconPathLight) + 1) * sizeof(wchar_t));
+                            RegSetValueExW(hSubKey, L"IconPath_Dark", 0, REG_SZ, (BYTE*)iconPathDark, (DWORD)(wcslen(iconPathDark) + 1) * sizeof(wchar_t));
                             RegSetValueExW(hSubKey, L"ShowFile", 0, REG_DWORD, (BYTE*)&f, sizeof(DWORD));
                             RegSetValueExW(hSubKey, L"ShowDir", 0, REG_DWORD, (BYTE*)&d, sizeof(DWORD));
                             RegSetValueExW(hSubKey, L"ShowBG", 0, REG_DWORD, (BYTE*)&b, sizeof(DWORD));
@@ -372,18 +390,21 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     if (pos != std::wstring::npos) name = name.substr(0, pos);
                     SetWindowTextW(g_hEditName, name.c_str());
 
-                    // Also set icon path if empty
-                    WCHAR iconPath[MAX_PATH];
-                    GetWindowTextW(g_hEditIcon, iconPath, MAX_PATH);
-                    if (wcslen(iconPath) == 0) SetWindowTextW(g_hEditIcon, szFile);
+                    // Also set icon paths if empty
+                    WCHAR iconPathLight[MAX_PATH], iconPathDark[MAX_PATH];
+                    GetWindowTextW(g_hEditIconLight, iconPathLight, MAX_PATH);
+                    GetWindowTextW(g_hEditIconDark, iconPathDark, MAX_PATH);
+                    if (wcslen(iconPathLight) == 0) SetWindowTextW(g_hEditIconLight, szFile);
+                    if (wcslen(iconPathDark) == 0) SetWindowTextW(g_hEditIconDark, szFile);
                 }
-            } else if (wmId == 104) { // Browse Icon
+            } else if (wmId == 104 || wmId == 107) { // Browse Icon (Light or Dark)
                 OPENFILENAMEW ofn = { sizeof(ofn) }; WCHAR szFile[MAX_PATH] = { 0 };
                 ofn.hwndOwner = hwnd; ofn.lpstrFile = szFile; ofn.nMaxFile = MAX_PATH;
                 ofn.lpstrFilter = L"Icons (EXE, DLL, ICO)\0*.exe;*.dll;*.ico\0All Files (*.*)\0*.*\0";
                 ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
                 if (GetOpenFileNameW(&ofn)) {
                     UINT numIcons = ExtractIconExW(szFile, -1, NULL, NULL, 0);
+                    HWND hTargetEdit = (wmId == 104) ? g_hEditIconLight : g_hEditIconDark;
                     if (numIcons > 1) {
                         int iconIndex = 0;
                         HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
@@ -392,12 +413,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                         if (pPickIconDlg && pPickIconDlg(hwnd, szFile, MAX_PATH, &iconIndex)) {
                             WCHAR finalIcon[MAX_PATH + 16];
                             swprintf_s(finalIcon, L"%s,%d", szFile, iconIndex);
-                            SetWindowTextW(g_hEditIcon, finalIcon);
+                            SetWindowTextW(hTargetEdit, finalIcon);
                         } else {
-                            SetWindowTextW(g_hEditIcon, szFile);
+                            SetWindowTextW(hTargetEdit, szFile);
                         }
                     } else {
-                        SetWindowTextW(g_hEditIcon, szFile);
+                        SetWindowTextW(hTargetEdit, szFile);
                     }
                 }
             } else if (wmId == 105) { // Backup
@@ -581,7 +602,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     HICON hIcon = (HICON)LoadImage(hInstance, MAKEINTRESOURCE(IDI_ICON1), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
     WNDCLASSEXW wc = { sizeof(WNDCLASSEX), CS_HREDRAW | CS_VREDRAW, WindowProc, 0, 0, hInstance, hIcon, LoadCursor(NULL, IDC_ARROW), NULL, NULL, CLASS_NAME, hIcon };
     RegisterClassExW(&wc);
-    HWND hwnd = CreateWindowExW(0, CLASS_NAME, L"xToolsMenu Settings", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, CW_USEDEFAULT, CW_USEDEFAULT, 420, 450, NULL, NULL, hInstance, NULL);
+    HWND hwnd = CreateWindowExW(0, CLASS_NAME, L"xToolsMenu Settings", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, CW_USEDEFAULT, CW_USEDEFAULT, 420, 490, NULL, NULL, hInstance, NULL);
     if (!hwnd) return 0;
     RECT rect; GetWindowRect(hwnd, &rect);
     SetWindowPos(hwnd, NULL, (GetSystemMetrics(SM_CXSCREEN) - (rect.right - rect.left)) / 2, (GetSystemMetrics(SM_CYSCREEN) - (rect.bottom - rect.top)) / 2, 0, 0, SWP_NOSIZE | SWP_NOZORDER);

@@ -297,6 +297,20 @@ static bool RunElevatedCommand(const std::wstring& parameters)
     return false;
 }
 
+static HWND GetHWNDFromSite(IUnknown* pUnkSite)
+{
+    HWND hwnd = NULL;
+    if (pUnkSite)
+    {
+        ComPtr<IOleWindow> pow;
+        if (SUCCEEDED(pUnkSite->QueryInterface(IID_PPV_ARGS(&pow))))
+        {
+            pow->GetWindow(&hwnd);
+        }
+    }
+    return hwnd;
+}
+
 static std::wstring GetCurrentUserSidString()
 {
     std::wstring sidString;
@@ -408,6 +422,9 @@ IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiItemArray, IBindCtx*
 
         std::vector<std::wstring> paths = GetTargetPaths(psiItemArray, _spUnkSite.Get());
 
+        HWND hwnd = GetHWNDFromSite(_spUnkSite.Get());
+        AllowSetForegroundWindow(ASFW_ANY);
+
         if (baseArgs.find(L"%1") != std::wstring::npos)
         {
             // Execute for each path
@@ -415,7 +432,7 @@ IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiItemArray, IBindCtx*
             {
                 std::wstring args = baseArgs;
                 ReplaceAll(args, L"%1", path);
-                ShellExecuteW(NULL, _runAsAdmin ? L"runas" : L"open", exePath.c_str(), args.c_str(), NULL, SW_SHOWNORMAL);
+                ShellExecuteW(hwnd, _runAsAdmin ? L"runas" : L"open", exePath.c_str(), args.c_str(), NULL, SW_SHOWNORMAL);
             }
         }
         else
@@ -429,12 +446,13 @@ IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiItemArray, IBindCtx*
                 if (!p.empty() && p.back() == L'\\') p += L'\\';
                 fullArgs += L"\""; fullArgs += p; fullArgs += L"\"";
             }
-            ShellExecuteW(NULL, _runAsAdmin ? L"runas" : L"open", exePath.c_str(), fullArgs.empty() ? NULL : fullArgs.c_str(), NULL, SW_SHOWNORMAL);
+            ShellExecuteW(hwnd, _runAsAdmin ? L"runas" : L"open", exePath.c_str(), fullArgs.empty() ? NULL : fullArgs.c_str(), NULL, SW_SHOWNORMAL);
         }
     }
     else if (_action == XToolsAction::Terminal || _action == XToolsAction::TerminalAdmin)
     {
         LPWSTR path = nullptr;
+        HWND hwnd = GetHWNDFromSite(_spUnkSite.Get());
         if (psiItemArray)
         {
             ComPtr<IShellItem> item;
@@ -469,7 +487,8 @@ IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiItemArray, IBindCtx*
             std::wstring dirStr(szDir);
             if (!dirStr.empty() && dirStr.back() == L'\\') dirStr += L'\\';
             std::wstring parameters = L"-d \"" + dirStr + L"\"";
-            ShellExecuteW(NULL, _action == XToolsAction::TerminalAdmin ? L"runas" : L"open", L"wt.exe", parameters.c_str(), szDir, SW_SHOWNORMAL);
+            AllowSetForegroundWindow(ASFW_ANY);
+            ShellExecuteW(hwnd, _action == XToolsAction::TerminalAdmin ? L"runas" : L"open", L"wt.exe", parameters.c_str(), szDir, SW_SHOWNORMAL);
             CoTaskMemFree(path);
         }
     }
@@ -537,7 +556,9 @@ IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiItemArray, IBindCtx*
                 }
             }
         }
-        ShellExecuteW(NULL, L"runas", szModule, params.empty() ? NULL : params.c_str(), NULL, SW_SHOWNORMAL);
+        HWND hwnd = GetHWNDFromSite(_spUnkSite.Get());
+        AllowSetForegroundWindow(ASFW_ANY);
+        ShellExecuteW(hwnd, L"runas", szModule, params.empty() ? NULL : params.c_str(), NULL, SW_SHOWNORMAL);
     }
     else if (_action == XToolsAction::PasteToFile)
     {
@@ -645,9 +666,15 @@ HRESULT XToolsCommandEnumerator::RuntimeClassInitialize()
                 RegGetValueW(hKey, name, L"Path", RRF_RT_REG_SZ, NULL, path, &pSize);
                 RegGetValueW(hKey, name, L"Args", RRF_RT_REG_SZ, NULL, args, &aSize);
 
-                if (RegGetValueW(hKey, name, L"IconPath", RRF_RT_REG_SZ, NULL, iconPath, &iSize) != ERROR_SUCCESS)
+                bool isDark = DarkModeManager::IsDarkMode();
+                const wchar_t* iconValueName = isDark ? L"IconPath_Dark" : L"IconPath_Light";
+                if (RegGetValueW(hKey, name, iconValueName, RRF_RT_REG_SZ, NULL, iconPath, &iSize) != ERROR_SUCCESS || wcslen(iconPath) == 0)
                 {
-                    wcscpy_s(iconPath, path);
+                    iSize = sizeof(iconPath);
+                    if (RegGetValueW(hKey, name, L"IconPath", RRF_RT_REG_SZ, NULL, iconPath, &iSize) != ERROR_SUCCESS)
+                    {
+                        wcscpy_s(iconPath, path);
+                    }
                 }
 
                 RegGetValueW(hKey, name, L"ShowFile", RRF_RT_REG_DWORD, NULL, &showFile, &dwSize);

@@ -50,10 +50,12 @@ void Elevate(HWND hwnd) {
     SHELLEXECUTEINFOW sei = { sizeof(sei) };
     sei.cbSize = sizeof(sei);
     sei.fMask = SEE_MASK_DEFAULT;
+    sei.hwnd = hwnd;
     sei.lpVerb = L"runas";
     sei.lpFile = szExe;
     sei.lpParameters = args.c_str();
     sei.nShow = SW_SHOWNORMAL;
+    AllowSetForegroundWindow(ASFW_ANY);
     if (ShellExecuteExW(&sei)) {
         DestroyWindow(hwnd);
     }
