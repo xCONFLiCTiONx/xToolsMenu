@@ -511,8 +511,17 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 WCHAR szFile[MAX_PATH] = { 0 };
                 int iconIndex = 0;
 
-                // The user specifically requested to open directly to imageres.dll
-                ExpandEnvironmentStringsW(L"%SystemRoot%\\System32\\imageres.dll", szFile, MAX_PATH);
+                GetWindowTextW(hTargetEdit, szFile, MAX_PATH);
+                if (wcslen(szFile) > 0) {
+                    WCHAR* pComma = wcsrchr(szFile, L',');
+                    if (pComma) {
+                        *pComma = L'\0';
+                        iconIndex = _wtoi(pComma + 1);
+                    }
+                } else {
+                    ExpandEnvironmentStringsW(L"%SystemRoot%\\System32\\imageres.dll", szFile, MAX_PATH);
+                    iconIndex = 0;
+                }
 
                 HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
                 typedef int (WINAPI* PFN_PickIconDlg)(HWND, LPWSTR, UINT, int*);
