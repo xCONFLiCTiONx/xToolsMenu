@@ -507,28 +507,21 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     if (wcslen(iconPathDark) == 0) SetWindowTextW(g_hEditIconDark, szFile);
                 }
             } else if (wmId == 104 || wmId == 107) { // Browse Icon (Light or Dark)
-                OPENFILENAMEW ofn = { sizeof(ofn) }; WCHAR szFile[MAX_PATH] = { 0 };
-                ofn.hwndOwner = hwnd; ofn.lpstrFile = szFile; ofn.nMaxFile = MAX_PATH;
-                ofn.lpstrFilter = L"Icons (EXE, DLL, ICO)\0*.exe;*.dll;*.ico\0All Files (*.*)\0*.*\0";
-                ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
-                if (GetOpenFileNameW(&ofn)) {
-                    UINT numIcons = ExtractIconExW(szFile, -1, NULL, NULL, 0);
-                    HWND hTargetEdit = (wmId == 104) ? g_hEditIconLight : g_hEditIconDark;
-                    if (numIcons > 1) {
-                        int iconIndex = 0;
-                        HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
-                        typedef int (WINAPI* PFN_PickIconDlg)(HWND, LPWSTR, UINT, int*);
-                        PFN_PickIconDlg pPickIconDlg = (PFN_PickIconDlg)GetProcAddress(hShell32, (LPCSTR)62);
-                        if (pPickIconDlg && pPickIconDlg(hwnd, szFile, MAX_PATH, &iconIndex)) {
-                            WCHAR finalIcon[MAX_PATH + 16];
-                            swprintf_s(finalIcon, L"%s,%d", szFile, iconIndex);
-                            SetWindowTextW(hTargetEdit, finalIcon);
-                        } else {
-                            SetWindowTextW(hTargetEdit, szFile);
-                        }
-                    } else {
-                        SetWindowTextW(hTargetEdit, szFile);
-                    }
+                HWND hTargetEdit = (wmId == 104) ? g_hEditIconLight : g_hEditIconDark;
+                WCHAR szFile[MAX_PATH] = { 0 };
+                int iconIndex = 0;
+
+                // The user specifically requested to open directly to imageres.dll
+                ExpandEnvironmentStringsW(L"%SystemRoot%\\System32\\imageres.dll", szFile, MAX_PATH);
+
+                HMODULE hShell32 = GetModuleHandleW(L"shell32.dll");
+                typedef int (WINAPI* PFN_PickIconDlg)(HWND, LPWSTR, UINT, int*);
+                PFN_PickIconDlg pPickIconDlg = (PFN_PickIconDlg)GetProcAddress(hShell32, (LPCSTR)62);
+
+                if (pPickIconDlg && pPickIconDlg(hwnd, szFile, MAX_PATH, &iconIndex)) {
+                    WCHAR finalIcon[MAX_PATH + 16];
+                    swprintf_s(finalIcon, L"%s,%d", szFile, iconIndex);
+                    SetWindowTextW(hTargetEdit, finalIcon);
                 }
             } else if (wmId == 105) { // Backup
                 OPENFILENAMEW ofn = { sizeof(ofn) };
