@@ -530,6 +530,17 @@ static std::vector<std::wstring> GetTargetPaths(IShellItemArray* psiItemArray, I
 
 static void ExecuteAction(XToolsAction action, const std::wstring& title, const std::wstring& data, const std::wstring& exePath, BOOL runAsAdmin, const std::vector<std::wstring>& paths, HWND hwnd)
 {
+    if (action == XToolsAction::EditWith && !data.empty())
+    {
+        std::wstring params;
+        for (const auto& f : paths) {
+            params += L"\"" + f + L"\" ";
+        }
+        AllowSetForegroundWindow(ASFW_ANY);
+        ShellExecuteW(hwnd, L"open", data.c_str(), params.empty() ? NULL : params.c_str(), NULL, SW_SHOWNORMAL);
+        return;
+    }
+
     if (action == XToolsAction::SystemFolders && !data.empty())
     {
         std::wstring path;
@@ -738,7 +749,6 @@ HRESULT XToolsCommandEnumerator::RuntimeClassInitialize()
     if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Attributes", XToolsAction::OpenExe, L"Assets\\Attributes.ico", L"AttributesDialog.exe"))) _commands.push_back(cmd);
     if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Terminal", XToolsAction::Terminal, L"Assets\\Terminals.ico"))) _commands.push_back(cmd);
     if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Terminal (admin)", XToolsAction::TerminalAdmin, L"Assets\\Terminals.ico"))) _commands.push_back(cmd);
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Edit with", XToolsAction::EditWith, L"Assets\\Edit with.ico"))) _commands.push_back(cmd);
     if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Paste to File", XToolsAction::PasteToFile, L"Assets\\Paste to File.ico"))) _commands.push_back(cmd);
     if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Copy Name", XToolsAction::CopyName, L"Assets\\Copy Name.ico"))) _commands.push_back(cmd);
     if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Copy Path", XToolsAction::CopyPath, L"Assets\\Copy Path.ico"))) _commands.push_back(cmd);
@@ -979,6 +989,135 @@ IFACEMETHODIMP XToolsClassicMenu::QueryContextMenu(HMENU hmenu, UINT indexMenu, 
                 menuPos++;
 
                 // Add placeholder for the submenu header slot so that IDs line up
+                _visibleItems.push_back({ item.title, XToolsAction::Custom, L"", L"", L"", FALSE });
+                count++;
+            }
+            else if (item.action == XToolsAction::EditWith)
+            {
+                HMENU hEditWithSubMenu = CreatePopupMenu();
+
+                std::wstring ext = L".txt";
+                if (!_selectedPaths.empty()) {
+                    ext = PathFindExtensionW(_selectedPaths[0].c_str());
+                    if (ext.empty()) ext = L".txt";
+                }
+
+                struct EditorInfoLocal {
+                    std::wstring name;
+                    std::wstring path;
+                };
+                std::vector<EditorInfoLocal> localEditors;
+
+                auto AddEditorLocal = [&](const std::wstring& name, const std::wstring& path) {
+                    if (path.empty()) return;
+                    WCHAR szFull[MAX_PATH];
+                    if (GetFullPathNameW(path.c_str(), MAX_PATH, szFull, NULL) == 0) {
+                        wcsncpy_s(szFull, path.c_str(), _TRUNCATE);
+                    }
+                    if (!PathFileExistsW(szFull)) return;
+                    for (const auto& e : localEditors) {
+                        if (_wcsicmp(e.path.c_str(), szFull) == 0) return;
+                        if (_wcsicmp(e.name.c_str(), name.c_str()) == 0) {
+                            const wchar_t* f1 = PathFindFileNameW(e.path.c_str());
+                            const wchar_t* f2 = PathFindFileNameW(szFull);
+                            if (_wcsicmp(f1, f2) == 0) return;
+                        }
+                    }
+                    localEditors.push_back({ name, szFull });
+                };
+
+                auto ScanHandlers = [&](const wchar_t* extension) {
+                    IEnumAssocHandlers* pEnum = nullptr;
+                    if (SUCCEEDED(SHAssocEnumHandlers(extension, ASSOC_FILTER_RECOMMENDED, &pEnum))) {
+                        IAssocHandler* pHandler = nullptr;
+                        ULONG fetched = 0;
+                        while (pEnum->Next(1, &pHandler, &fetched) == S_OK && fetched == 1) {
+                            LPWSTR name = nullptr;
+                            LPWSTR path = nullptr;
+                            if (SUCCEEDED(pHandler->GetUIName(&name))) {
+                                if (SUCCEEDED(pHandler->GetName(&path))) {
+                                    if (PathFileExistsW(path)) {
+                                        AddEditorLocal(name, path);
+                                    } else {
+                                        WCHAR szPath[MAX_PATH];
+                                        DWORD dwSize = MAX_PATH;
+                                        if (SUCCEEDED(AssocQueryStringW(ASSOCF_INIT_BYEXENAME, ASSOCSTR_EXECUTABLE, path, NULL, szPath, &dwSize))) {
+                                            AddEditorLocal(name, szPath);
+                                        }
+                                    }
+                                    CoTaskMemFree(path);
+                                }
+                                CoTaskMemFree(name);
+                            }
+                            pHandler->Release();
+                        }
+                        pEnum->Release();
+                    }
+                };
+
+                ScanHandlers(ext.c_str());
+                if (ext != L".txt") ScanHandlers(L".txt");
+
+                const std::pair<std::wstring, std::wstring> common[] = {
+                    { L"VS Code", L"code.exe" },
+                    { L"Notepad++", L"notepad++.exe" },
+                    { L"Sublime Text", L"sublime_text.exe" }
+                };
+                for (const auto& c : common) {
+                    WCHAR szPath[MAX_PATH];
+                    DWORD dwSize = MAX_PATH;
+                    if (SUCCEEDED(AssocQueryStringW(ASSOCF_INIT_BYEXENAME, ASSOCSTR_EXECUTABLE, c.second.c_str(), NULL, szPath, &dwSize))) {
+                        AddEditorLocal(c.first, szPath);
+                    }
+                }
+
+                WCHAR szNotepad[MAX_PATH];
+                GetSystemDirectoryW(szNotepad, MAX_PATH);
+                PathAppendW(szNotepad, L"notepad.exe");
+                AddEditorLocal(L"Notepad", szNotepad);
+
+                UINT subCount = 0;
+                for (const auto& ed : localEditors)
+                {
+                    MENUITEMINFOW sfMii = { sizeof(sfMii) };
+                    sfMii.fMask = MIIM_STRING | MIIM_ID;
+                    sfMii.wID = idCmdFirst + count;
+                    sfMii.dwTypeData = (LPWSTR)ed.name.c_str();
+
+                    HBITMAP sfHbmp = CreateMenuBitmapFromIcon(item.icon.c_str());
+                    if (sfHbmp)
+                    {
+                        sfMii.fMask |= MIIM_BITMAP;
+                        sfMii.hbmpItem = sfHbmp;
+                        _bitmaps.push_back(sfHbmp);
+                    }
+
+                    InsertMenuItemW(hEditWithSubMenu, subCount, TRUE, &sfMii);
+
+                    ClassicMenuItemInternal sfInternalItem = { ed.name, XToolsAction::EditWith, ed.path, L"", item.icon, FALSE };
+                    _visibleItems.push_back(sfInternalItem);
+
+                    count++;
+                    subCount++;
+                }
+
+                MENUITEMINFOW mii = { sizeof(mii) };
+                mii.fMask = MIIM_SUBMENU | MIIM_STRING | MIIM_ID;
+                mii.wID = idCmdFirst + count;
+                mii.hSubMenu = hEditWithSubMenu;
+                mii.dwTypeData = (LPWSTR)item.title.c_str();
+
+                HBITMAP hbmp = CreateMenuBitmapFromIcon(item.icon.c_str());
+                if (hbmp)
+                {
+                    mii.fMask |= MIIM_BITMAP;
+                    mii.hbmpItem = hbmp;
+                    _bitmaps.push_back(hbmp);
+                }
+
+                InsertMenuItemW(hSubMenu, menuPos, TRUE, &mii);
+                menuPos++;
+
                 _visibleItems.push_back({ item.title, XToolsAction::Custom, L"", L"", L"", FALSE });
                 count++;
             }
