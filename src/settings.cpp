@@ -229,7 +229,10 @@ void UpdateSidebarVisibility() {
     auto ToggleGroup = [&](std::vector<SettingItem>& group, bool show) {
         for (auto& item : group) {
             if (item.hWndLabel) ShowWindow(item.hWndLabel, show ? SW_SHOW : SW_HIDE);
-            if (item.hWndNew) ShowWindow(item.hWndNew, show ? SW_SHOW : SW_HIDE);
+            if (item.hWndNew) {
+                if (item.label == L"System Folders") ShowWindow(item.hWndNew, SW_HIDE);
+                else ShowWindow(item.hWndNew, show ? SW_SHOW : SW_HIDE);
+            }
             if (item.hWndOld) ShowWindow(item.hWndOld, show ? SW_SHOW : SW_HIDE);
         }
     };
@@ -302,7 +305,11 @@ void UpdateSidebarVisibility() {
                 for (size_t i = 0; i < group.size(); ++i) {
                     int x = (i % 2 == 0) ? col1X : col2X;
                     SetWindowPos(group[i].hWndLabel, NULL, x, y + 3, 200, 25, SWP_NOZORDER | SWP_SHOWWINDOW);
-                    SetWindowPos(group[i].hWndNew, NULL, x + 215, y, 25, 25, SWP_NOZORDER | SWP_SHOWWINDOW);
+                    if (group[i].label == L"System Folders") {
+                        ShowWindow(group[i].hWndNew, SW_HIDE);
+                    } else {
+                        SetWindowPos(group[i].hWndNew, NULL, x + 215, y, 25, 25, SWP_NOZORDER | SWP_SHOWWINDOW);
+                    }
                     SetWindowPos(group[i].hWndOld, NULL, x + 265, y, 25, 25, SWP_NOZORDER | SWP_SHOWWINDOW);
                     if (i % 2 == 1 || i == group.size() - 1) y += 35;
                 }

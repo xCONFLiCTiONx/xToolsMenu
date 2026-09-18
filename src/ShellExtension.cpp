@@ -530,6 +530,38 @@ static std::vector<std::wstring> GetTargetPaths(IShellItemArray* psiItemArray, I
 
 static void ExecuteAction(XToolsAction action, const std::wstring& title, const std::wstring& data, const std::wstring& exePath, BOOL runAsAdmin, const std::vector<std::wstring>& paths, HWND hwnd)
 {
+    if (action == XToolsAction::SystemFolders && !data.empty())
+    {
+        std::wstring path;
+        if (data == L"startmenu_user") {
+            WCHAR szPath[MAX_PATH];
+            if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_STARTMENU, NULL, 0, szPath))) path = szPath;
+        }
+        else if (data == L"startmenu_all") {
+            WCHAR szPath[MAX_PATH];
+            if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_COMMON_STARTMENU, NULL, 0, szPath))) path = szPath;
+        }
+        else if (data == L"temp") {
+            WCHAR szPath[MAX_PATH];
+            GetTempPathW(MAX_PATH, szPath);
+            path = szPath;
+        }
+        else if (data == L"appdata_local") {
+            WCHAR szPath[MAX_PATH];
+            if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, szPath))) path = szPath;
+        }
+        else if (data == L"programdata") {
+            WCHAR szPath[MAX_PATH];
+            if (SUCCEEDED(SHGetFolderPathW(NULL, CSIDL_COMMON_APPDATA, NULL, 0, szPath))) path = szPath;
+        }
+
+        if (!path.empty()) {
+            AllowSetForegroundWindow(ASFW_ANY);
+            ShellExecuteW(hwnd, L"open", path.c_str(), NULL, NULL, SW_SHOWNORMAL);
+        }
+        return;
+    }
+
     if (action == XToolsAction::OpenExe || action == XToolsAction::EditWith || action == XToolsAction::SystemFolders || action == XToolsAction::Settings || action == XToolsAction::Custom)
     {
         std::wstring targetExe, baseArgs;
@@ -707,7 +739,6 @@ HRESULT XToolsCommandEnumerator::RuntimeClassInitialize()
     if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Terminal", XToolsAction::Terminal, L"Assets\\Terminals.ico"))) _commands.push_back(cmd);
     if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Terminal (admin)", XToolsAction::TerminalAdmin, L"Assets\\Terminals.ico"))) _commands.push_back(cmd);
     if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Edit with", XToolsAction::EditWith, L"Assets\\Edit with.ico"))) _commands.push_back(cmd);
-    if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"System Folders", XToolsAction::SystemFolders, L"Assets\\System Folders.ico"))) _commands.push_back(cmd);
     if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Paste to File", XToolsAction::PasteToFile, L"Assets\\Paste to File.ico"))) _commands.push_back(cmd);
     if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Copy Name", XToolsAction::CopyName, L"Assets\\Copy Name.ico"))) _commands.push_back(cmd);
     if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, L"Copy Path", XToolsAction::CopyPath, L"Assets\\Copy Path.ico"))) _commands.push_back(cmd);
@@ -884,26 +915,93 @@ IFACEMETHODIMP XToolsClassicMenu::QueryContextMenu(HMENU hmenu, UINT indexMenu, 
 
     HMENU hSubMenu = CreatePopupMenu();
     UINT count = 0;
+    UINT menuPos = 0;
     for (const auto& item : allPossibleItems)
     {
         if (IsCommandVisible(item.action, item.title, false, _isFolder, _isBackground, _selectedPaths))
         {
-            MENUITEMINFOW mii = { sizeof(mii) };
-            mii.fMask = MIIM_STRING | MIIM_ID;
-            mii.wID = idCmdFirst + count;
-            mii.dwTypeData = (LPWSTR)item.title.c_str();
-
-            HBITMAP hbmp = CreateMenuBitmapFromIcon(item.icon.c_str());
-            if (hbmp)
+            if (item.action == XToolsAction::SystemFolders)
             {
-                mii.fMask |= MIIM_BITMAP;
-                mii.hbmpItem = hbmp;
-                _bitmaps.push_back(hbmp);
-            }
+                HMENU hSysFoldersSubMenu = CreatePopupMenu();
 
-            InsertMenuItemW(hSubMenu, count, TRUE, &mii);
-            _visibleItems.push_back(item);
-            count++;
+                struct SubFolderItem {
+                    std::wstring title;
+                    std::wstring data;
+                };
+                std::vector<SubFolderItem> subFolders = {
+                    { L"Start Menu (User)", L"startmenu_user" },
+                    { L"Start Menu (All Users)", L"startmenu_all" },
+                    { L"Temp Folder", L"temp" },
+                    { L"AppData (Local)", L"appdata_local" },
+                    { L"ProgramData", L"programdata" }
+                };
+
+                UINT subCount = 0;
+                for (const auto& sf : subFolders)
+                {
+                    MENUITEMINFOW sfMii = { sizeof(sfMii) };
+                    sfMii.fMask = MIIM_STRING | MIIM_ID;
+                    sfMii.wID = idCmdFirst + count;
+                    sfMii.dwTypeData = (LPWSTR)sf.title.c_str();
+
+                    HBITMAP sfHbmp = CreateMenuBitmapFromIcon(item.icon.c_str());
+                    if (sfHbmp)
+                    {
+                        sfMii.fMask |= MIIM_BITMAP;
+                        sfMii.hbmpItem = sfHbmp;
+                        _bitmaps.push_back(sfHbmp);
+                    }
+
+                    InsertMenuItemW(hSysFoldersSubMenu, subCount, TRUE, &sfMii);
+
+                    ClassicMenuItemInternal sfInternalItem = { sf.title, XToolsAction::SystemFolders, sf.data, L"", item.icon, FALSE };
+                    _visibleItems.push_back(sfInternalItem);
+
+                    count++;
+                    subCount++;
+                }
+
+                MENUITEMINFOW mii = { sizeof(mii) };
+                mii.fMask = MIIM_SUBMENU | MIIM_STRING | MIIM_ID;
+                mii.wID = idCmdFirst + count;
+                mii.hSubMenu = hSysFoldersSubMenu;
+                mii.dwTypeData = (LPWSTR)item.title.c_str();
+
+                HBITMAP hbmp = CreateMenuBitmapFromIcon(item.icon.c_str());
+                if (hbmp)
+                {
+                    mii.fMask |= MIIM_BITMAP;
+                    mii.hbmpItem = hbmp;
+                    _bitmaps.push_back(hbmp);
+                }
+
+                InsertMenuItemW(hSubMenu, menuPos, TRUE, &mii);
+                menuPos++;
+
+                // Add placeholder for the submenu header slot so that IDs line up
+                _visibleItems.push_back({ item.title, XToolsAction::Custom, L"", L"", L"", FALSE });
+                count++;
+            }
+            else
+            {
+                MENUITEMINFOW mii = { sizeof(mii) };
+                mii.fMask = MIIM_STRING | MIIM_ID;
+                mii.wID = idCmdFirst + count;
+                mii.dwTypeData = (LPWSTR)item.title.c_str();
+
+                HBITMAP hbmp = CreateMenuBitmapFromIcon(item.icon.c_str());
+                if (hbmp)
+                {
+                    mii.fMask |= MIIM_BITMAP;
+                    mii.hbmpItem = hbmp;
+                    _bitmaps.push_back(hbmp);
+                }
+
+                InsertMenuItemW(hSubMenu, menuPos, TRUE, &mii);
+                menuPos++;
+                _visibleItems.push_back(item);
+                count++;
+            }
         }
     }
 
