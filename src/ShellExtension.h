@@ -51,7 +51,7 @@ class XToolsSubCommand : public RuntimeClass<RuntimeClassFlags<ClassicCom>, IExp
 public:
     HRESULT RuntimeClassInitialize(PCWSTR title, XToolsAction action, PCWSTR icon = nullptr, PCWSTR data = nullptr,
                                  BOOL showFile = TRUE, BOOL showDir = TRUE, BOOL showBG = TRUE, PCWSTR exePath = nullptr,
-                                 BOOL runAsAdmin = FALSE) {
+                                 BOOL runAsAdmin = FALSE, DWORD allowedFileTypes = 0xFFFF) {
         _title = title;
         _action = action;
         _icon = icon ? icon : L"";
@@ -61,6 +61,7 @@ public:
         _showBG = showBG;
         _exePath = exePath ? exePath : L"";
         _runAsAdmin = runAsAdmin;
+        _allowedFileTypes = allowedFileTypes;
         return S_OK;
     }
 
@@ -87,6 +88,7 @@ private:
     BOOL _showBG;
     std::wstring _exePath;
     BOOL _runAsAdmin;
+    DWORD _allowedFileTypes;
     ComPtr<IUnknown> _spUnkSite;
 };
 

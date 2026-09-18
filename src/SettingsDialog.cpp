@@ -8,6 +8,7 @@
 #include <map>
 #include "resource.h"
 #include "DarkMode.h"
+#include "FileTypeHelper.h"
 
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "advapi32.lib")
@@ -63,6 +64,7 @@ HWND g_hEditName = nullptr, g_hEditPath = nullptr, g_hEditArgs = nullptr, g_hEdi
 HWND g_hBtnAdd = nullptr, g_hBtnEdit = nullptr, g_hBtnDel = nullptr, g_hBtnBrowse = nullptr, g_hBtnBrowseIconLight = nullptr, g_hBtnBrowseIconDark = nullptr;
 HWND g_hStaticSelect = nullptr, g_hStaticName = nullptr, g_hStaticPath = nullptr, g_hStaticArgs = nullptr, g_hStaticIconLight = nullptr, g_hStaticIconDark = nullptr;
 HWND g_hChkFile = nullptr, g_hChkDir = nullptr, g_hChkBG = nullptr, g_hChkAdmin = nullptr;
+std::map<FileTypeCategory, HWND> g_hFileTypeChecks;
 HWND g_hBtnBackup = nullptr, g_hBtnRestore = nullptr;
 
 bool GetSetting(const wchar_t* name) {
@@ -78,6 +80,13 @@ void SetSetting(const wchar_t* name, bool enabled) {
         RegSetValueExW(hKey, name, 0, REG_DWORD, (BYTE*)&value, sizeof(value));
         RegCloseKey(hKey);
     }
+}
+
+LRESULT CALLBACK ForwardMouseWheelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+    if (uMsg == WM_MOUSEWHEEL) {
+        return SendMessage(g_hViewport, uMsg, wParam, lParam);
+    }
+    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
 }
 
 LRESULT CALLBACK ViewportProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
@@ -103,9 +112,21 @@ LRESULT CALLBACK ViewportProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam
         }
         return 0;
     }
-    case WM_MOUSEWHEEL:
-        SendMessage(hwnd, WM_VSCROLL, (short)HIWORD(wParam) > 0 ? SB_LINEUP : SB_LINEDOWN, 0);
+    case WM_MOUSEWHEEL: {
+        int delta = GET_WHEEL_DELTA_WPARAM(wParam);
+        UINT scrollLines = 3;
+        SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &scrollLines, 0);
+        if (scrollLines == WHEEL_PAGESCROLL) {
+            SendMessage(hwnd, WM_VSCROLL, delta > 0 ? SB_PAGEUP : SB_PAGEDOWN, 0);
+        } else {
+            int numLines = (abs(delta) * (int)scrollLines) / WHEEL_DELTA;
+            if (numLines == 0 && delta != 0) numLines = 1;
+            for (int i = 0; i < numLines; i++) {
+                SendMessage(hwnd, WM_VSCROLL, delta > 0 ? SB_LINEUP : SB_LINEDOWN, 0);
+            }
+        }
         return 0;
+    }
     case WM_COMMAND:
     case WM_NOTIFY:
     case WM_CTLCOLORDLG:
@@ -127,6 +148,8 @@ LRESULT CALLBACK ViewportProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam
 
 LRESULT CALLBACK PageContentProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
     switch (uMsg) {
+    case WM_MOUSEWHEEL:
+        return SendMessage(GetParent(hwnd), uMsg, wParam, lParam);
     case WM_COMMAND:
     case WM_NOTIFY:
     case WM_CTLCOLORDLG:
@@ -195,6 +218,7 @@ void SelectCustomCommand() {
         SendMessage(g_hChkDir, BM_SETCHECK, BST_CHECKED, 0);
         SendMessage(g_hChkBG, BM_SETCHECK, BST_CHECKED, 0);
         SendMessage(g_hChkAdmin, BM_SETCHECK, BST_UNCHECKED, 0);
+        for (auto& pair : g_hFileTypeChecks) SendMessage(pair.second, BM_SETCHECK, BST_CHECKED, 0);
         return;
     }
 
@@ -229,6 +253,14 @@ void SelectCustomCommand() {
     SendMessage(g_hChkDir, BM_SETCHECK, d ? BST_CHECKED : BST_UNCHECKED, 0);
     SendMessage(g_hChkBG, BM_SETCHECK, b ? BST_CHECKED : BST_UNCHECKED, 0);
     SendMessage(g_hChkAdmin, BM_SETCHECK, admin ? BST_CHECKED : BST_UNCHECKED, 0);
+
+    DWORD allowedFileTypes = 0xFFFF;
+    dwSize = sizeof(DWORD);
+    RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), L"AllowedFileTypes", RRF_RT_REG_DWORD, NULL, &allowedFileTypes, &dwSize);
+    for (auto& pair : g_hFileTypeChecks) {
+        bool allowed = (allowedFileTypes & (DWORD)pair.first);
+        SendMessage(pair.second, BM_SETCHECK, allowed ? BST_CHECKED : BST_UNCHECKED, 0);
+    }
 }
 
 void UpdateTabVisibility() {
@@ -289,6 +321,7 @@ void UpdateTabVisibility() {
                         item.hWnd = CreateWindowW(L"BUTTON", name, WS_CHILD | BS_AUTOCHECKBOX, 20, yFile, 300, 25, g_hPageContent, NULL, hInst, NULL);
                         SendMessage(item.hWnd, WM_SETFONT, (WPARAM)g_hFont, TRUE);
                         SendMessage(item.hWnd, BM_SETCHECK, enabledFile ? BST_CHECKED : BST_UNCHECKED, 0);
+                        SetWindowSubclass(item.hWnd, ForwardMouseWheelProc, 1, 0);
                         g_fileSettings.push_back(item);
                         yFile += 30;
                     }
@@ -297,6 +330,7 @@ void UpdateTabVisibility() {
                         item.hWnd = CreateWindowW(L"BUTTON", name, WS_CHILD | BS_AUTOCHECKBOX, 20, yDir, 300, 25, g_hPageContent, NULL, hInst, NULL);
                         SendMessage(item.hWnd, WM_SETFONT, (WPARAM)g_hFont, TRUE);
                         SendMessage(item.hWnd, BM_SETCHECK, enabledDir ? BST_CHECKED : BST_UNCHECKED, 0);
+                        SetWindowSubclass(item.hWnd, ForwardMouseWheelProc, 1, 0);
                         g_dirSettings.push_back(item);
                         yDir += 30;
                     }
@@ -305,6 +339,7 @@ void UpdateTabVisibility() {
                         item.hWnd = CreateWindowW(L"BUTTON", name, WS_CHILD | BS_AUTOCHECKBOX, 20, yBg, 300, 25, g_hPageContent, NULL, hInst, NULL);
                         SendMessage(item.hWnd, WM_SETFONT, (WPARAM)g_hFont, TRUE);
                         SendMessage(item.hWnd, BM_SETCHECK, enabledBg ? BST_CHECKED : BST_UNCHECKED, 0);
+                        SetWindowSubclass(item.hWnd, ForwardMouseWheelProc, 1, 0);
                         g_bgSettings.push_back(item);
                         yBg += 30;
                     }
@@ -317,7 +352,8 @@ void UpdateTabVisibility() {
         }
         DarkModeManager::ApplyToControls(g_hPageContent);
     } else {
-        maxY = 340;
+        maxY = 500;
+        DarkModeManager::ApplyToControls(g_hPageContent);
     }
     UpdateScroll(maxY);
 
@@ -347,6 +383,7 @@ void UpdateTabVisibility() {
     ShowWindow(g_hChkDir, bCustom ? SW_SHOW : SW_HIDE);
     ShowWindow(g_hChkBG, bCustom ? SW_SHOW : SW_HIDE);
     ShowWindow(g_hChkAdmin, bCustom ? SW_SHOW : SW_HIDE);
+    for (auto& pair : g_hFileTypeChecks) ShowWindow(pair.second, bCustom ? SW_SHOW : SW_HIDE);
     ShowWindow(g_hBtnBackup, bCustom ? SW_SHOW : SW_HIDE);
     ShowWindow(g_hBtnRestore, bCustom ? SW_SHOW : SW_HIDE);
 }
@@ -420,8 +457,22 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         g_hChkBG = CreateWindowW(L"BUTTON", L"Background", WS_CHILD | BS_AUTOCHECKBOX, inputX + 155, y, 95, 25, g_hPageContent, NULL, hInst, NULL);
         y += 22;
         g_hChkAdmin = CreateWindowW(L"BUTTON", L"Run as administrator", WS_CHILD | BS_AUTOCHECKBOX, inputX, y, 200, 25, g_hPageContent, NULL, hInst, NULL);
+        y += 28;
 
-        y += 35;
+        CreateWindowW(L"STATIC", L"File Types (only for 'File' target):", WS_CHILD, labelX, y, 280, 20, g_hPageContent, NULL, hInst, NULL);
+        y += 22;
+        int colW = 110;
+        int catX[3] = { inputX - 75, inputX + 45, inputX + 165 }; // Adjusting to start further left to use space better
+        auto categories = FileTypeHelper::GetAllCategories();
+        for (size_t i = 0; i < categories.size(); i++) {
+            int cx = catX[i % 3];
+            std::wstring catName = FileTypeHelper::GetCategoryName(categories[i]);
+            HWND hChk = CreateWindowW(L"BUTTON", catName.c_str(), WS_CHILD | BS_AUTOCHECKBOX, cx, y, colW, 22, g_hPageContent, NULL, hInst, NULL);
+            g_hFileTypeChecks[categories[i]] = hChk;
+            if (i % 3 == 2 || i == categories.size() - 1) y += 22;
+        }
+
+        y += 10;
         int btnW = 100;
         g_hBtnAdd = CreateWindowW(L"BUTTON", L"Add", WS_CHILD, 25, y, btnW, 30, g_hPageContent, (HMENU)100, hInst, NULL);
         g_hBtnEdit = CreateWindowW(L"BUTTON", L"Edit", WS_CHILD, 137, y, btnW, 30, g_hPageContent, (HMENU)103, hInst, NULL);
@@ -434,6 +485,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         EnumChildWindows(hwnd, [](HWND hChild, LPARAM lp) -> BOOL {
             SendMessage(hChild, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+            // Forward mouse wheel for all children to the viewport for consistent scrolling
+            if (hChild != g_hViewport && hChild != g_hPageContent) {
+                SetWindowSubclass(hChild, ForwardMouseWheelProc, 1, 0);
+            }
             return TRUE;
         }, 0);
         LoadCustomCommands();
@@ -467,6 +522,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                             RegSetValueExW(hSubKey, L"ShowDir", 0, REG_DWORD, (BYTE*)&d, sizeof(DWORD));
                             RegSetValueExW(hSubKey, L"ShowBG", 0, REG_DWORD, (BYTE*)&b, sizeof(DWORD));
                             RegSetValueExW(hSubKey, L"RunAsAdmin", 0, REG_DWORD, (BYTE*)&admin, sizeof(DWORD));
+
+                            DWORD allowedFileTypes = 0;
+                            for (auto& pair : g_hFileTypeChecks) {
+                                if (SendMessage(pair.second, BM_GETCHECK, 0, 0) == BST_CHECKED) {
+                                    allowedFileTypes |= (DWORD)pair.first;
+                                }
+                            }
+                            RegSetValueExW(hSubKey, L"AllowedFileTypes", 0, REG_DWORD, (BYTE*)&allowedFileTypes, sizeof(DWORD));
 
                             // Maintain or write an Enabled flag when adding or editing commands
                             if (wmId == 100) { // Add

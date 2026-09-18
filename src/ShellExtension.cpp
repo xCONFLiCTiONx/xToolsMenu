@@ -1,11 +1,13 @@
 #include "ShellExtension.h"
 #include "resource.h"
 #include "DarkMode.h"
+#include "FileTypeHelper.h"
 #include <shlwapi.h>
 #include <shlobj.h>
 #include <vector>
 #include <sddl.h>
 #include <appmodel.h>
+#include <filesystem>
 
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "shell32.lib")
@@ -248,10 +250,35 @@ IFACEMETHODIMP XToolsSubCommand::GetState(IShellItemArray* psiItemArray, BOOL, E
                 if (SUCCEEDED(item->GetAttributes(SFGAO_FOLDER, &attrs)))
                 {
                     isFolder = (attrs & SFGAO_FOLDER);
-                    if (_action == XToolsAction::Custom)
+                    if (isFolder && _action == XToolsAction::Custom)
                     {
-                        if (isFolder && !_showDir) { *pCmdState = ECS_HIDDEN; return S_OK; }
-                        if (!isFolder && !_showFile) { *pCmdState = ECS_HIDDEN; return S_OK; }
+                        if (!_showDir) { *pCmdState = ECS_HIDDEN; return S_OK; }
+                    }
+                    if (!isFolder && _action == XToolsAction::Custom)
+                    {
+                        if (!_showFile) { *pCmdState = ECS_HIDDEN; return S_OK; }
+
+                        // Check file type restrictions
+                        DWORD count = 0;
+                        psiItemArray->GetCount(&count);
+                        for (DWORD i = 0; i < count; i++)
+                        {
+                            ComPtr<IShellItem> subItem;
+                            if (SUCCEEDED(psiItemArray->GetItemAt(i, &subItem)))
+                            {
+                                LPWSTR pszPath = nullptr;
+                                if (SUCCEEDED(subItem->GetDisplayName(SIGDN_FILESYSPATH, &pszPath)))
+                                {
+                                    FileTypeCategory cat = FileTypeHelper::GetCategoryForPath(pszPath);
+                                    CoTaskMemFree(pszPath);
+                                    if (!((DWORD)cat & _allowedFileTypes))
+                                    {
+                                        *pCmdState = ECS_HIDDEN;
+                                        return S_OK;
+                                    }
+                                }
+                            }
+                        }
                     }
                     if (isFolder)
                     {
@@ -682,12 +709,15 @@ HRESULT XToolsCommandEnumerator::RuntimeClassInitialize()
                 RegGetValueW(hKey, name, L"ShowBG", RRF_RT_REG_DWORD, NULL, &showBG, &dwSize);
                 RegGetValueW(hKey, name, L"RunAsAdmin", RRF_RT_REG_DWORD, NULL, &runAsAdmin, &dwSize);
 
-                DWORD enabledFile = 1, enabledDir = 1, enabledBg = 1;
+                DWORD enabledFile = 1, enabledDir = 1, enabledBg = 1, allowedFileTypes = 0xFFFF;
                 RegGetValueW(hKey, name, L"Enabled_Files", RRF_RT_REG_DWORD, NULL, &enabledFile, &dwSize);
                 RegGetValueW(hKey, name, L"Enabled_Directory", RRF_RT_REG_DWORD, NULL, &enabledDir, &dwSize);
                 RegGetValueW(hKey, name, L"Enabled_Background", RRF_RT_REG_DWORD, NULL, &enabledBg, &dwSize);
 
-                if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, name, XToolsAction::Custom, iconPath, args, showFile && enabledFile, showDir && enabledDir, showBG && enabledBg, path, runAsAdmin))) _commands.push_back(cmd);
+                dwSize = sizeof(DWORD);
+                RegGetValueW(hKey, name, L"AllowedFileTypes", RRF_RT_REG_DWORD, NULL, &allowedFileTypes, &dwSize);
+
+                if (SUCCEEDED(MakeAndInitialize<XToolsSubCommand>(&cmd, name, XToolsAction::Custom, iconPath, args, showFile && enabledFile, showDir && enabledDir, showBG && enabledBg, path, runAsAdmin, allowedFileTypes))) _commands.push_back(cmd);
             }
         }
         RegCloseKey(hKey);
