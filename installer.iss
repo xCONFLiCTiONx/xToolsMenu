@@ -3,10 +3,10 @@
 #define AppName "xToolsMenu"
 #define AppVersion "1.0.0.0"
 #define AppPublisher "xCONFLiCTiONx"
-#define AppCLSID "D1B6F6E9-4A9A-4B6A-8A4E-7C2D8D6E5C9A"
+#define AppCLSID "{D1B6F6E9-4A9A-4B6A-8A4E-7C2D8D6E5C9A}"
 
 [Setup]
-AppId="D1B6F6E9-4A9A-4B6A-8A4E-7C2D8D6E5C9A"
+AppId={{D1B6F6E9-4A9A-4B6A-8A4E-7C2D8D6E5C9A}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
@@ -30,21 +30,20 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Source: "AppPackage\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "ICON.ico"; DestDir: "{app}"; Flags: ignoreversion
 
-[Registry]
-Root: HKCU; Subkey: "Software\Classes\CLSID\{#AppCLSID}"; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\CLSID\{#AppCLSID}\InprocServer32"; ValueType: string; ValueName: ""; ValueData: "{app}\xToolsMenu.dll"; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\CLSID\{#AppCLSID}\InprocServer32"; ValueType: string; ValueName: "ThreadingModel"; ValueData: "Apartment"; Flags: uninsdeletekey
-
 [Run]
-; Register Sparse Package
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""Add-AppxPackage -Register -Path '{app}\AppxManifest.xml' -ExternalLocation '{app}'"""; Flags: runhidden
-; Restart Explorer to apply changes
-Filename: "taskkill.exe"; Parameters: "/f /im explorer.exe"; Flags: runhidden
-Filename: "{win}\explorer.exe"; Flags: nowait runasoriginaluser
+; Run the reliable Install wrapper which references .register.ps1
+Filename: "{app}\Install.exe"; StatusMsg: "Registering Shell Extension..."; Flags: runhidden
 
 [UninstallRun]
-; Unregister Sparse Package
-Filename: "powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""Get-AppxPackage -Name xToolsMenu.Extension | Remove-AppxPackage"""; Flags: runhidden; RunOnceId: "UnregisterAppx"
-; Restart Explorer to apply changes
-Filename: "taskkill.exe"; Parameters: "/f /im explorer.exe"; Flags: runhidden; RunOnceId: "KillExplorerUninst"
-Filename: "{win}\explorer.exe"; Flags: nowait; RunOnceId: "StartExplorerUninst"
+; Run the reliable Uninstall wrapper which references .unregister.bat
+Filename: "{app}\Uninstall.exe"; StatusMsg: "Unregistering Shell Extension..."; Flags: runhidden
+
+[Code]
+// Helper to ensure we don't leave things behind if the wrapper fails
+procedure CurUninstallStepChanged(UninstallStep: TUninstallStep);
+begin
+  if UninstallStep = usPostUninstall then
+  begin
+    // Optional: Add manual cleanup here if needed, but Uninstall.exe should handle it
+  end;
+end;

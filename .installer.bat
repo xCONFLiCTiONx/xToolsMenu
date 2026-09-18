@@ -21,11 +21,13 @@ msbuild xToolsMenu.slnx /p:Configuration=Release /p:Platform=x64 /t:Rebuild
 if not exist "x64\Release" mkdir "x64\Release"
 if exist "src\app.rc" rc.exe /fo src\app.res src\app.rc
 if exist "src\Launcher.cpp" cl /nologo /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\Launcher.exe src\Launcher.cpp src\app.res /link /SUBSYSTEM:WINDOWS user32.lib
-if exist "src\AttributesDialog.cpp" cl /nologo /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\AttributesDialog.exe src\AttributesDialog.cpp src\app.res /link /SUBSYSTEM:WINDOWS user32.lib advapi32.lib shell32.lib comctl32.lib gdi32.lib
-if exist "src\EditWithDialog.cpp" cl /nologo /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\EditWithDialog.exe src\EditWithDialog.cpp src\app.res /link /SUBSYSTEM:WINDOWS user32.lib advapi32.lib shell32.lib comctl32.lib comdlg32.lib gdi32.lib
-if exist "src\SystemFoldersDialog.cpp" cl /nologo /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\SystemFoldersDialog.exe src\SystemFoldersDialog.cpp src\app.res /link /SUBSYSTEM:WINDOWS user32.lib advapi32.lib shell32.lib comctl32.lib gdi32.lib
-if exist "src\TakeOwnershipDialog.cpp" cl /nologo /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\TakeOwnership.exe src\TakeOwnershipDialog.cpp src\app.res /link /SUBSYSTEM:WINDOWS user32.lib advapi32.lib shell32.lib comctl32.lib gdi32.lib
-if exist "src\SettingsDialog.cpp" cl /nologo /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\Settings.exe src\SettingsDialog.cpp src\app.res /link /SUBSYSTEM:WINDOWS user32.lib advapi32.lib shell32.lib comctl32.lib comdlg32.lib gdi32.lib
+if exist "src\AttributesDialog.cpp" cl /nologo /O2 /std:c++17 /D UNICODE /D _UNICODE /Fe:x64\Release\AttributesDialog.exe src\AttributesDialog.cpp src\DarkMode.cpp src\app.res /link /SUBSYSTEM:WINDOWS user32.lib advapi32.lib shell32.lib comctl32.lib gdi32.lib dwmapi.lib uxtheme.lib
+if exist "src\EditWithDialog.cpp" cl /nologo /O2 /std:c++17 /D UNICODE /D _UNICODE /Fe:x64\Release\EditWithDialog.exe src\EditWithDialog.cpp src\DarkMode.cpp src\app.res /link /SUBSYSTEM:WINDOWS user32.lib advapi32.lib shell32.lib comctl32.lib comdlg32.lib gdi32.lib dwmapi.lib uxtheme.lib
+if exist "src\SystemFoldersDialog.cpp" cl /nologo /O2 /std:c++17 /D UNICODE /D _UNICODE /Fe:x64\Release\SystemFoldersDialog.exe src\SystemFoldersDialog.cpp src\DarkMode.cpp src\app.res /link /SUBSYSTEM:WINDOWS user32.lib advapi32.lib shell32.lib comctl32.lib gdi32.lib dwmapi.lib uxtheme.lib
+if exist "src\TakeOwnershipDialog.cpp" cl /nologo /O2 /std:c++17 /D UNICODE /D _UNICODE /Fe:x64\Release\TakeOwnership.exe src\TakeOwnershipDialog.cpp src\DarkMode.cpp src\app.res /link /SUBSYSTEM:WINDOWS user32.lib advapi32.lib shell32.lib comctl32.lib gdi32.lib dwmapi.lib uxtheme.lib
+if exist "src\SettingsDialog.cpp" cl /nologo /O2 /std:c++17 /D UNICODE /D _UNICODE /Fe:x64\Release\Settings.exe src\SettingsDialog.cpp src\DarkMode.cpp src\FileTypeHelper.cpp src\app.res /link /SUBSYSTEM:WINDOWS user32.lib advapi32.lib shell32.lib comctl32.lib comdlg32.lib gdi32.lib dwmapi.lib uxtheme.lib
+if exist "src\Install.cpp" cl /nologo /O2 /std:c++17 /D UNICODE /D _UNICODE /Fe:Install.exe src\Install.cpp src\app.res /link /SUBSYSTEM:CONSOLE user32.lib advapi32.lib shell32.lib comctl32.lib gdi32.lib ole32.lib
+if exist "src\Uninstall.cpp" cl /nologo /O2 /std:c++17 /D UNICODE /D _UNICODE /Fe:Uninstall.exe src\Uninstall.cpp src\app.res /link /SUBSYSTEM:CONSOLE user32.lib advapi32.lib shell32.lib comctl32.lib gdi32.lib ole32.lib
 
 echo ==========================================
 echo [2/5] Staging Files into AppPackage...
@@ -45,6 +47,10 @@ copy /y "%~dp0x64\Release\Settings.exe" "%StageDir%\" >nul
 copy /y "%~dp0x64\Release\SystemFoldersDialog.exe" "%StageDir%\" >nul
 copy /y "%~dp0x64\Release\TakeOwnership.exe" "%StageDir%\" >nul
 copy /y "%~dp0x64\Release\xToolsMenu.dll" "%StageDir%\" >nul
+copy /y "%~dp0Install.exe" "%StageDir%\" >nul
+copy /y "%~dp0Uninstall.exe" "%StageDir%\" >nul
+copy /y "%~dp0.register.ps1" "%StageDir%\" >nul
+copy /y "%~dp0.unregister.bat" "%StageDir%\" >nul
 
 echo ==========================================
 echo [3/5] Signing xToolsMenu.dll...

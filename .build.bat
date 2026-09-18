@@ -65,6 +65,14 @@ if exist "src\SettingsDialog.cpp" (
     cl /nologo /std:c++17 /O2 /D UNICODE /D _UNICODE /Fe:x64\Release\Settings.exe src\SettingsDialog.cpp src\DarkMode.cpp src\FileTypeHelper.cpp src\app.res /link /SUBSYSTEM:WINDOWS user32.lib advapi32.lib shell32.lib comctl32.lib comdlg32.lib gdi32.lib dwmapi.lib uxtheme.lib
 )
 
+if exist "src\Install.cpp" (
+    cl /nologo /std:c++17 /O2 /D UNICODE /D _UNICODE /Fe:Install.exe src\Install.cpp src\app.res /link /SUBSYSTEM:CONSOLE user32.lib advapi32.lib shell32.lib comctl32.lib gdi32.lib dwmapi.lib uxtheme.lib ole32.lib
+)
+
+if exist "src\Uninstall.cpp" (
+    cl /nologo /std:c++17 /O2 /D UNICODE /D _UNICODE /Fe:Uninstall.exe src\Uninstall.cpp src\app.res /link /SUBSYSTEM:CONSOLE user32.lib advapi32.lib shell32.lib comctl32.lib gdi32.lib dwmapi.lib uxtheme.lib ole32.lib
+)
+
 echo ==========================================
 echo [3/4] Staging Files into AppPackage...
 echo ==========================================

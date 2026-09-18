@@ -24,6 +24,16 @@ enum class XToolsAction {
     Custom
 };
 
+struct ClassicMenuItemInternal {
+    std::wstring title;
+    XToolsAction action;
+    std::wstring data;
+    std::wstring exePath;
+    std::wstring icon;
+    BOOL runAsAdmin;
+};
+
+
 class __declspec(uuid("D1B6F6E9-4A9A-4B6A-8A4E-7C2D8D6E5C9A"))
 XToolsMenuCommand : public RuntimeClass<RuntimeClassFlags<ClassicCom>, IExplorerCommand, IObjectWithSite>
 {
@@ -45,6 +55,37 @@ public:
 private:
     ComPtr<IUnknown> _spUnkSite;
 };
+
+// XToolsClassicMenu - IContextMenu implementation for older Windows versions / classic menu
+class __declspec(uuid("E5F7B8C0-5B0B-4D7B-9F1F-8C3D9E7F6A1B"))
+XToolsClassicMenu : public RuntimeClass<RuntimeClassFlags<ClassicCom>, IContextMenu, IShellExtInit>
+{
+public:
+    XToolsClassicMenu() = default;
+    virtual ~XToolsClassicMenu() {
+        for (HBITMAP hbmp : _bitmaps) {
+            if (hbmp) DeleteObject(hbmp);
+        }
+    }
+
+    // IShellExtInit
+    IFACEMETHODIMP Initialize(_In_opt_ PCIDLIST_ABSOLUTE pidlFolder, _In_opt_ IDataObject* pdtobj, _In_opt_ HKEY hkeyProgID) override;
+
+    // IContextMenu
+    IFACEMETHODIMP QueryContextMenu(_In_ HMENU hmenu, _In_ UINT indexMenu, _In_ UINT idCmdFirst, _In_ UINT idCmdLast, _In_ UINT uFlags) override;
+    IFACEMETHODIMP InvokeCommand(_In_ LPCMINVOKECOMMANDINFO lpici) override;
+    IFACEMETHODIMP GetCommandString(_In_ UINT_PTR idCmd, _In_ UINT uType, _Reserved_ UINT* pwReserved, _Out_writes_bytes_(cchMax) LPSTR pszName, _In_ UINT cchMax) override;
+
+private:
+    std::vector<std::wstring> _selectedPaths;
+    bool _isBackground = false;
+    bool _isFolder = false;
+    std::vector<ClassicMenuItemInternal> _visibleItems;
+    std::vector<HBITMAP> _bitmaps;
+};
+
+
+bool IsCommandVisible(XToolsAction action, const std::wstring& customName, bool isNewMenu, bool isFolder, bool isBackground, const std::vector<std::wstring>& selectedPaths);
 
 class XToolsSubCommand : public RuntimeClass<RuntimeClassFlags<ClassicCom>, IExplorerCommand, IObjectWithSite>
 {

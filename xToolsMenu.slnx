@@ -4,12 +4,35 @@
     <Platform Name="x86" />
   </Configurations>
   <Folder Name="/Solution Items/">
+    <File Path="src/DarkMode.cpp" />
+    <File Path="src/DarkMode.h" />
+    <File Path="src/EditWithDialog.cpp" />
+    <File Path="src/FileTypeHelper.cpp" />
+    <File Path="src/FileTypeHelper.h" />
+    <File Path="src/Install.cpp" />
     <File Path="src/Launcher.cpp" />
+    <File Path="src/app.rc" />
+    <File Path="src/app.res" />
     <File Path="src/AttributesDialog.cpp" />
     <File Path="src/ShellExtension.cpp" />
+    <File Path="src/ShellExtension.def" />
     <File Path="src/ShellExtension.h" />
+    <File Path="src/manifest.xml" />
+    <File Path="src/resource.h" />
     <File Path="src/SettingsDialog.cpp" />
+    <File Path="src/SystemFoldersDialog.cpp" />
     <File Path="src/TakeOwnershipDialog.cpp" />
+    <File Path="src/Uninstall.cpp" />
+  </Folder>
+  <Folder Name="/Companion Tools/">
+    <Project Path="Settings/Settings.vcxproj" Id="A1B2C3D4-E5F6-7A8B-9C0D-1E2F3A4B5C6D" DefaultStartup="true" />
+    <Project Path="Launcher/Launcher.vcxproj" Id="B2C3D4E5-F6A7-8B9C-0D1E-2F3A4B5C6D7E" />
+    <Project Path="Install/Install.vcxproj" Id="C3D4E5F6-A7B8-9C0D-1E2F-3A4B5C6D7E8F" />
+    <Project Path="Uninstall/Uninstall.vcxproj" Id="D4E5F6A7-B8C9-0D1E-2F3A-4B5C6D7E8F9A" />
+    <Project Path="AttributesDialog/AttributesDialog.vcxproj" Id="E5F6A7B8-C9D0-1E2F-3A4B-5C6D7E8F9A0B" />
+    <Project Path="EditWithDialog/EditWithDialog.vcxproj" Id="F6A7B8C9-D0E1-2F3A-4B5C-6D7E8F9A0B1C" />
+    <Project Path="SystemFoldersDialog/SystemFoldersDialog.vcxproj" Id="A7B8C9D0-E1F2-3A4B-5C6D-7E8F9A0B1C2D" />
+    <Project Path="TakeOwnership/TakeOwnership.vcxproj" Id="B8C9D0E1-F2A3-4B5C-6D7E-8F9A0B1C2D3E" />
   </Folder>
   <Project Path="xToolsMenu/xToolsMenu.vcxproj" Id="12345678-abcd-efab-cdef-123456789abc" />
 </Solution>

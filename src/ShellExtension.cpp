@@ -75,6 +75,28 @@ static HRESULT ResolveRelativeIconPath(PCWSTR pszRelativePath, LPWSTR* ppszIcon)
     return E_FAIL;
 }
 
+static HBITMAP CreateMenuBitmapFromIcon(PCWSTR pszIconPath)
+{
+    LPWSTR pszFull = nullptr;
+    if (FAILED(ResolveRelativeIconPath(pszIconPath, &pszFull))) return NULL;
+
+    HICON hIcon = (HICON)LoadImageW(NULL, pszFull, IMAGE_ICON, 16, 16, LR_LOADFROMFILE);
+    CoTaskMemFree(pszFull);
+
+    if (!hIcon) return NULL;
+
+    HBITMAP hBitmap = NULL;
+    ICONINFO iconInfo;
+    if (GetIconInfo(hIcon, &iconInfo))
+    {
+        hBitmap = (HBITMAP)CopyImage(iconInfo.hbmColor, IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION);
+        DeleteObject(iconInfo.hbmColor);
+        DeleteObject(iconInfo.hbmMask);
+    }
+    DestroyIcon(hIcon);
+    return hBitmap;
+}
+
 // IExplorerCommand implementation for root menu
 IFACEMETHODIMP XToolsMenuCommand::GetTitle(IShellItemArray*, LPWSTR* ppszName)
 {
@@ -142,6 +164,9 @@ IFACEMETHODIMP XToolsMenuCommand::GetSite(REFIID riid, void** ppvSite)
     return _spUnkSite.CopyTo(riid, ppvSite);
 }
 
+static std::vector<std::wstring> GetTargetPaths(IShellItemArray* psiItemArray, IUnknown* pUnkSite);
+
+
 // SubCommand implementation
 IFACEMETHODIMP XToolsSubCommand::GetTitle(IShellItemArray* psiItemArray, LPWSTR* ppszName)
 {
@@ -189,118 +214,118 @@ IFACEMETHODIMP XToolsSubCommand::GetCanonicalName(GUID* pguidCommandName)
     return E_NOTIMPL;
 }
 
-static bool IsFeatureEnabled(XToolsAction action, bool isFolder, bool isBackground)
+bool IsCommandVisible(XToolsAction action, const std::wstring& customName, bool isNewMenu, bool isFolder, bool isBackground, const std::vector<std::wstring>& selectedPaths)
 {
-    if (action == XToolsAction::Settings || action == XToolsAction::Custom) return true;
+    if (action == XToolsAction::Settings) return true;
+
+    if (action == XToolsAction::Custom)
+    {
+        HKEY hKey;
+        if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\xToolsMenu\\CustomCommands", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+        {
+            HKEY hSubKey;
+            if (RegOpenKeyExW(hKey, customName.c_str(), 0, KEY_READ, &hSubKey) == ERROR_SUCCESS)
+            {
+                DWORD showFile = 1, showDir = 1, showBG = 1, allowedFileTypes = 0xFFFF;
+                DWORD dwSize = sizeof(DWORD);
+                RegGetValueW(hSubKey, NULL, L"ShowFile", RRF_RT_REG_DWORD, NULL, &showFile, &dwSize);
+                RegGetValueW(hSubKey, NULL, L"ShowDir", RRF_RT_REG_DWORD, NULL, &showDir, &dwSize);
+                RegGetValueW(hSubKey, NULL, L"ShowBG", RRF_RT_REG_DWORD, NULL, &showBG, &dwSize);
+                RegGetValueW(hSubKey, NULL, L"AllowedFileTypes", RRF_RT_REG_DWORD, NULL, &allowedFileTypes, &dwSize);
+
+                const wchar_t* valName = L"Enabled_Files";
+                if (isBackground) valName = L"Enabled_Background";
+                else if (isFolder) valName = L"Enabled_Directory";
+
+                std::wstring valNameStr = valName;
+                if (!isNewMenu) valNameStr += L"_Old";
+
+                DWORD enabled = (isNewMenu && !isBackground && !isFolder && wcsstr(valNameStr.c_str(), L"_Old") == nullptr) ? 1 : 0;
+                // Actually the default for New Menu is 1, Old Menu is 0.
+                enabled = (wcsstr(valNameStr.c_str(), L"_Old") != nullptr) ? 0 : 1;
+
+                dwSize = sizeof(DWORD);
+                RegGetValueW(hSubKey, NULL, valNameStr.c_str(), RRF_RT_REG_DWORD, NULL, &enabled, &dwSize);
+
+                RegCloseKey(hSubKey);
+                RegCloseKey(hKey);
+
+                if (enabled == 0) return false;
+                if (isBackground && !showBG) return false;
+                if (isFolder && !showDir) return false;
+                if (!isBackground && !isFolder)
+                {
+                    if (!showFile) return false;
+                    for (const auto& path : selectedPaths)
+                    {
+                        FileTypeCategory cat = FileTypeHelper::GetCategoryForPath(path.c_str());
+                        if (!((DWORD)cat & allowedFileTypes)) return false;
+                    }
+                }
+                return true;
+            }
+            RegCloseKey(hKey);
+        }
+        return false;
+    }
+
+    // Built-in commands
+    if (isBackground)
+    {
+        if (action == XToolsAction::CopyName || action == XToolsAction::CopyPath || action == XToolsAction::EditWith || action == XToolsAction::TakeOwnership) return false;
+    }
+    else if (isFolder)
+    {
+        if (action == XToolsAction::SystemFolders || action == XToolsAction::PasteToFile || action == XToolsAction::EditWith) return false;
+    }
+    else // File
+    {
+        if (action == XToolsAction::Terminal || action == XToolsAction::TerminalAdmin || action == XToolsAction::SystemFolders || action == XToolsAction::PasteToFile) return false;
+    }
+
     const wchar_t* REG_PATH = L"Software\\xToolsMenu\\Settings";
-    std::wstring prefix;
-    if (isBackground) prefix = L"Background_";
-    else if (isFolder) prefix = L"Directory_";
-    else prefix = L"Files_";
-    std::wstring name;
+    std::wstring valName;
+    if (isBackground) valName = L"Background_";
+    else if (isFolder) valName = L"Directory_";
+    else valName = L"Files_";
+
     switch (action)
     {
-    case XToolsAction::OpenExe: name = L"Attributes"; break;
-    case XToolsAction::Terminal: name = L"Terminal"; break;
-    case XToolsAction::TerminalAdmin: name = L"TerminalAdmin"; break;
-    case XToolsAction::EditWith: name = L"EditWith"; break;
-    case XToolsAction::SystemFolders: name = L"SystemFolders"; break;
-    case XToolsAction::PasteToFile: name = L"PasteToFile"; break;
-    case XToolsAction::CopyName: name = L"CopyName"; break;
-    case XToolsAction::CopyPath: name = L"CopyPath"; break;
-    case XToolsAction::TakeOwnership: name = L"TakeOwnership"; break;
+    case XToolsAction::OpenExe: valName += L"Attributes"; break;
+    case XToolsAction::Terminal: valName += L"Terminal"; break;
+    case XToolsAction::TerminalAdmin: valName += L"TerminalAdmin"; break;
+    case XToolsAction::EditWith: valName += L"EditWith"; break;
+    case XToolsAction::SystemFolders: valName += L"SystemFolders"; break;
+    case XToolsAction::PasteToFile: valName += L"PasteToFile"; break;
+    case XToolsAction::CopyName: valName += L"CopyName"; break;
+    case XToolsAction::CopyPath: valName += L"CopyPath"; break;
+    case XToolsAction::TakeOwnership: valName += L"TakeOwnership"; break;
     default: return true;
     }
-    std::wstring valueName = prefix + name;
-    DWORD value = 1;
+
+    if (!isNewMenu) valName += L"_Old";
+
+    DWORD value = (wcsstr(valName.c_str(), L"_Old") != nullptr) ? 0 : 1;
     DWORD size = sizeof(value);
-    RegGetValueW(HKEY_CURRENT_USER, REG_PATH, valueName.c_str(), RRF_RT_REG_DWORD, NULL, &value, &size);
+    RegGetValueW(HKEY_CURRENT_USER, REG_PATH, valName.c_str(), RRF_RT_REG_DWORD, NULL, &value, &size);
     return value != 0;
 }
 
 IFACEMETHODIMP XToolsSubCommand::GetState(IShellItemArray* psiItemArray, BOOL, EXPCMDSTATE* pCmdState)
 {
-    *pCmdState = ECS_ENABLED;
-    bool isFolder = false, isBackground = false;
-    if (!psiItemArray)
-    {
-        isBackground = true;
-        if (_action == XToolsAction::Custom && !_showBG)
-        {
-            *pCmdState = ECS_HIDDEN;
-            return S_OK;
-        }
-        if (_action == XToolsAction::CopyName || _action == XToolsAction::CopyPath || _action == XToolsAction::EditWith || _action == XToolsAction::TakeOwnership)
-        {
-            *pCmdState = ECS_HIDDEN;
-            return S_OK;
-        }
+    std::vector<std::wstring> paths = GetTargetPaths(psiItemArray, _spUnkSite.Get());
+    bool isBackground = paths.empty();
+    bool isFolder = false;
+    if (!paths.empty()) {
+        DWORD attrs = GetFileAttributesW(paths[0].c_str());
+        if (attrs != INVALID_FILE_ATTRIBUTES) isFolder = (attrs & FILE_ATTRIBUTE_DIRECTORY);
     }
-    else
-    {
-        DWORD count = 0;
-        psiItemArray->GetCount(&count);
-        if (count == 0) isBackground = true;
-        else
-        {
-            ComPtr<IShellItem> item;
-            if (SUCCEEDED(psiItemArray->GetItemAt(0, &item)))
-            {
-                SFGAOF attrs;
-                if (SUCCEEDED(item->GetAttributes(SFGAO_FOLDER, &attrs)))
-                {
-                    isFolder = (attrs & SFGAO_FOLDER);
-                    if (isFolder && _action == XToolsAction::Custom)
-                    {
-                        if (!_showDir) { *pCmdState = ECS_HIDDEN; return S_OK; }
-                    }
-                    if (!isFolder && _action == XToolsAction::Custom)
-                    {
-                        if (!_showFile) { *pCmdState = ECS_HIDDEN; return S_OK; }
 
-                        // Check file type restrictions
-                        DWORD count = 0;
-                        psiItemArray->GetCount(&count);
-                        for (DWORD i = 0; i < count; i++)
-                        {
-                            ComPtr<IShellItem> subItem;
-                            if (SUCCEEDED(psiItemArray->GetItemAt(i, &subItem)))
-                            {
-                                LPWSTR pszPath = nullptr;
-                                if (SUCCEEDED(subItem->GetDisplayName(SIGDN_FILESYSPATH, &pszPath)))
-                                {
-                                    FileTypeCategory cat = FileTypeHelper::GetCategoryForPath(pszPath);
-                                    CoTaskMemFree(pszPath);
-                                    if (!((DWORD)cat & _allowedFileTypes))
-                                    {
-                                        *pCmdState = ECS_HIDDEN;
-                                        return S_OK;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if (isFolder)
-                    {
-                        if (_action == XToolsAction::SystemFolders || _action == XToolsAction::PasteToFile || _action == XToolsAction::EditWith)
-                        {
-                            *pCmdState = ECS_HIDDEN;
-                            return S_OK;
-                        }
-                    }
-                    else
-                    {
-                        if (_action == XToolsAction::Terminal || _action == XToolsAction::TerminalAdmin || _action == XToolsAction::SystemFolders || _action == XToolsAction::PasteToFile)
-                        {
-                            *pCmdState = ECS_HIDDEN;
-                            return S_OK;
-                        }
-                    }
-                }
-            }
-        }
-    }
-    if (!IsFeatureEnabled(_action, isFolder, isBackground)) *pCmdState = ECS_HIDDEN;
+    if (IsCommandVisible(_action, _title, true, isFolder, isBackground, paths))
+        *pCmdState = ECS_ENABLED;
+    else
+        *pCmdState = ECS_HIDDEN;
+
     return S_OK;
 }
 
@@ -424,47 +449,42 @@ static std::vector<std::wstring> GetTargetPaths(IShellItemArray* psiItemArray, I
     return paths;
 }
 
-IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiItemArray, IBindCtx*)
+static void ExecuteAction(XToolsAction action, const std::wstring& title, const std::wstring& data, const std::wstring& exePath, BOOL runAsAdmin, const std::vector<std::wstring>& paths, HWND hwnd)
 {
-    if (_action == XToolsAction::OpenExe || _action == XToolsAction::EditWith || _action == XToolsAction::SystemFolders || _action == XToolsAction::Settings || _action == XToolsAction::Custom)
+    if (action == XToolsAction::OpenExe || action == XToolsAction::EditWith || action == XToolsAction::SystemFolders || action == XToolsAction::Settings || action == XToolsAction::Custom)
     {
-        std::wstring exePath, baseArgs;
-        if (_action == XToolsAction::Custom)
+        std::wstring targetExe, baseArgs;
+        if (action == XToolsAction::Custom)
         {
-            exePath = _exePath;
-            baseArgs = _data;
+            targetExe = exePath;
+            baseArgs = data;
         }
         else
         {
             WCHAR szModule[MAX_PATH];
             GetModuleFileNameW(g_hInst, szModule, ARRAYSIZE(szModule));
             PathRemoveFileSpecW(szModule);
-            std::wstring exeName = _data;
-            if (_action == XToolsAction::EditWith) exeName = L"EditWithDialog.exe";
-            else if (_action == XToolsAction::SystemFolders) exeName = L"SystemFoldersDialog.exe";
-            else if (_action == XToolsAction::Settings) exeName = L"Settings.exe";
+            std::wstring exeName = data;
+            if (action == XToolsAction::EditWith) exeName = L"EditWithDialog.exe";
+            else if (action == XToolsAction::SystemFolders) exeName = L"SystemFoldersDialog.exe";
+            else if (action == XToolsAction::Settings) exeName = L"Settings.exe";
             PathAppendW(szModule, exeName.c_str());
-            exePath = szModule;
+            targetExe = szModule;
         }
 
-        std::vector<std::wstring> paths = GetTargetPaths(psiItemArray, _spUnkSite.Get());
-
-        HWND hwnd = GetHWNDFromSite(_spUnkSite.Get());
         AllowSetForegroundWindow(ASFW_ANY);
 
         if (baseArgs.find(L"%1") != std::wstring::npos)
         {
-            // Execute for each path
             for (const auto& path : paths)
             {
                 std::wstring args = baseArgs;
                 ReplaceAll(args, L"%1", path);
-                ShellExecuteW(hwnd, _runAsAdmin ? L"runas" : L"open", exePath.c_str(), args.c_str(), NULL, SW_SHOWNORMAL);
+                ShellExecuteW(hwnd, runAsAdmin ? L"runas" : L"open", targetExe.c_str(), args.c_str(), NULL, SW_SHOWNORMAL);
             }
         }
         else
         {
-            // Append all paths to one command
             std::wstring fullArgs = baseArgs;
             for (const auto& path : paths)
             {
@@ -473,89 +493,46 @@ IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiItemArray, IBindCtx*
                 if (!p.empty() && p.back() == L'\\') p += L'\\';
                 fullArgs += L"\""; fullArgs += p; fullArgs += L"\"";
             }
-            ShellExecuteW(hwnd, _runAsAdmin ? L"runas" : L"open", exePath.c_str(), fullArgs.empty() ? NULL : fullArgs.c_str(), NULL, SW_SHOWNORMAL);
+            ShellExecuteW(hwnd, runAsAdmin ? L"runas" : L"open", targetExe.c_str(), fullArgs.empty() ? NULL : fullArgs.c_str(), NULL, SW_SHOWNORMAL);
         }
     }
-    else if (_action == XToolsAction::Terminal || _action == XToolsAction::TerminalAdmin)
+    else if (action == XToolsAction::Terminal || action == XToolsAction::TerminalAdmin)
     {
-        LPWSTR path = nullptr;
-        HWND hwnd = GetHWNDFromSite(_spUnkSite.Get());
-        if (psiItemArray)
+        if (!paths.empty())
         {
-            ComPtr<IShellItem> item;
-            if (SUCCEEDED(psiItemArray->GetItemAt(0, &item))) item->GetDisplayName(SIGDN_FILESYSPATH, &path);
-        }
-        else if (_spUnkSite)
-        {
-            ComPtr<IServiceProvider> sp;
-            if (SUCCEEDED(_spUnkSite.As(&sp)))
-            {
-                ComPtr<IShellBrowser> sb;
-                if (SUCCEEDED(sp->QueryService(SID_SShellBrowser, IID_PPV_ARGS(&sb))))
-                {
-                    ComPtr<IShellView> sv;
-                    if (SUCCEEDED(sb->QueryActiveShellView(&sv)))
-                    {
-                        ComPtr<IFolderView> fv;
-                        if (SUCCEEDED(sv->QueryInterface(IID_PPV_ARGS(&fv))))
-                        {
-                            ComPtr<IShellItem> item;
-                            if (SUCCEEDED(fv->GetFolder(IID_PPV_ARGS(&item)))) item->GetDisplayName(SIGDN_FILESYSPATH, &path);
-                        }
-                    }
-                }
-            }
-        }
-        if (path)
-        {
-            WCHAR szDir[MAX_PATH]; wcscpy_s(szDir, path);
-            DWORD attrs = GetFileAttributesW(path);
+            WCHAR szDir[MAX_PATH]; wcscpy_s(szDir, paths[0].c_str());
+            DWORD attrs = GetFileAttributesW(paths[0].c_str());
             if (!(attrs & FILE_ATTRIBUTE_DIRECTORY)) PathRemoveFileSpecW(szDir);
             std::wstring dirStr(szDir);
             if (!dirStr.empty() && dirStr.back() == L'\\') dirStr += L'\\';
             std::wstring parameters = L"-d \"" + dirStr + L"\"";
             AllowSetForegroundWindow(ASFW_ANY);
-            ShellExecuteW(hwnd, _action == XToolsAction::TerminalAdmin ? L"runas" : L"open", L"wt.exe", parameters.c_str(), szDir, SW_SHOWNORMAL);
-            CoTaskMemFree(path);
+            ShellExecuteW(hwnd, action == XToolsAction::TerminalAdmin ? L"runas" : L"open", L"wt.exe", parameters.c_str(), szDir, SW_SHOWNORMAL);
         }
     }
-    else if (_action == XToolsAction::CopyName || _action == XToolsAction::CopyPath)
+    else if (action == XToolsAction::CopyName || action == XToolsAction::CopyPath)
     {
-        if (psiItemArray)
+        std::wstring text;
+        for (const auto& path : paths)
         {
-            std::wstring text;
-            DWORD count = 0;
-            psiItemArray->GetCount(&count);
-            for (DWORD i = 0; i < count; i++)
+            if (!text.empty()) text += L"\r\n";
+            if (action == XToolsAction::CopyName) text += PathFindFileNameW(path.c_str());
+            else text += path;
+        }
+        if (!text.empty() && OpenClipboard(NULL))
+        {
+            EmptyClipboard();
+            size_t size = (text.length() + 1) * sizeof(wchar_t);
+            HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, size);
+            if (hMem)
             {
-                ComPtr<IShellItem> item;
-                if (SUCCEEDED(psiItemArray->GetItemAt(i, &item)))
-                {
-                    LPWSTR path = nullptr;
-                    if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path)))
-                    {
-                        if (!text.empty()) text += L"\r\n";
-                        if (_action == XToolsAction::CopyName) text += PathFindFileNameW(path);
-                        else text += path;
-                        CoTaskMemFree(path);
-                    }
-                }
+                void* pMem = GlobalLock(hMem);
+                if (pMem) { memcpy(pMem, text.c_str(), size); GlobalUnlock(hMem); SetClipboardData(CF_UNICODETEXT, hMem); }
             }
-            if (OpenClipboard(NULL))
-            {
-                EmptyClipboard();
-                size_t size = (text.length() + 1) * sizeof(wchar_t);
-                HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, size);
-                if (hMem)
-                {
-                    void* pMem = GlobalLock(hMem);
-                    if (pMem) { memcpy(pMem, text.c_str(), size); GlobalUnlock(hMem); SetClipboardData(CF_UNICODETEXT, hMem); }
-                }
-                CloseClipboard();
-            }
+            CloseClipboard();
         }
     }
-    else if (_action == XToolsAction::TakeOwnership)
+    else if (action == XToolsAction::TakeOwnership)
     {
         WCHAR szModule[MAX_PATH];
         GetModuleFileNameW(g_hInst, szModule, ARRAYSIZE(szModule));
@@ -563,76 +540,59 @@ IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiItemArray, IBindCtx*
         PathAppendW(szModule, L"TakeOwnership.exe");
 
         std::wstring params;
-        if (psiItemArray)
+        for (const auto& path : paths)
         {
-            DWORD count = 0;
-            psiItemArray->GetCount(&count);
-            for (DWORD i = 0; i < count; i++)
-            {
-                ComPtr<IShellItem> item;
-                if (SUCCEEDED(psiItemArray->GetItemAt(i, &item)))
-                {
-                    LPWSTR path = nullptr;
-                    if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path)))
-                    {
-                        params += L"\"";
-                        params += path;
-                        params += L"\" ";
-                        CoTaskMemFree(path);
-                    }
-                }
-            }
+            params += L"\"";
+            params += path;
+            params += L"\" ";
         }
-        HWND hwnd = GetHWNDFromSite(_spUnkSite.Get());
         AllowSetForegroundWindow(ASFW_ANY);
         ShellExecuteW(hwnd, L"runas", szModule, params.empty() ? NULL : params.c_str(), NULL, SW_SHOWNORMAL);
     }
-    else if (_action == XToolsAction::PasteToFile)
+    else if (action == XToolsAction::PasteToFile)
     {
-        if (psiItemArray)
+        if (!paths.empty())
         {
-            ComPtr<IShellItem> item;
-            if (SUCCEEDED(psiItemArray->GetItemAt(0, &item)))
+            WCHAR szDir[MAX_PATH]; wcscpy_s(szDir, paths[0].c_str());
+            DWORD attrs = GetFileAttributesW(paths[0].c_str());
+            if (!(attrs & FILE_ATTRIBUTE_DIRECTORY)) PathRemoveFileSpecW(szDir);
+            PathAppendW(szDir, L"Clipboard.txt");
+            if (OpenClipboard(NULL))
             {
-                LPWSTR path = nullptr;
-                if (SUCCEEDED(item->GetDisplayName(SIGDN_FILESYSPATH, &path)))
+                HANDLE hData = GetClipboardData(CF_UNICODETEXT);
+                if (hData)
                 {
-                    WCHAR szDir[MAX_PATH]; wcscpy_s(szDir, path);
-                    DWORD attrs = GetFileAttributesW(path);
-                    if (!(attrs & FILE_ATTRIBUTE_DIRECTORY)) PathRemoveFileSpecW(szDir);
-                    PathAppendW(szDir, L"Clipboard.txt");
-                    if (OpenClipboard(NULL))
+                    LPCWSTR pText = (LPCWSTR)GlobalLock(hData);
+                    if (pText)
                     {
-                        HANDLE hData = GetClipboardData(CF_UNICODETEXT);
-                        if (hData)
+                        HANDLE hFile = CreateFileW(szDir, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+                        if (hFile != INVALID_HANDLE_VALUE)
                         {
-                            LPCWSTR pText = (LPCWSTR)GlobalLock(hData);
-                            if (pText)
+                            int utf8Len = WideCharToMultiByte(CP_UTF8, 0, pText, -1, NULL, 0, NULL, NULL);
+                            if (utf8Len > 0)
                             {
-                                HANDLE hFile = CreateFileW(szDir, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
-                                if (hFile != INVALID_HANDLE_VALUE)
-                                {
-                                    int utf8Len = WideCharToMultiByte(CP_UTF8, 0, pText, -1, NULL, 0, NULL, NULL);
-                                    if (utf8Len > 0)
-                                    {
-                                        std::vector<char> utf8Text(utf8Len);
-                                        WideCharToMultiByte(CP_UTF8, 0, pText, -1, utf8Text.data(), utf8Len, NULL, NULL);
-                                        DWORD written;
-                                        WriteFile(hFile, utf8Text.data(), (DWORD)(utf8Len - 1), &written, NULL);
-                                    }
-                                    CloseHandle(hFile);
-                                }
-                                GlobalUnlock(hData);
+                                std::vector<char> utf8Text(utf8Len);
+                                WideCharToMultiByte(CP_UTF8, 0, pText, -1, utf8Text.data(), utf8Len, NULL, NULL);
+                                DWORD written;
+                                WriteFile(hFile, utf8Text.data(), (DWORD)(utf8Len - 1), &written, NULL);
                             }
+                            CloseHandle(hFile);
                         }
-                        CloseClipboard();
-                        SHChangeNotify(SHCNE_CREATE, SHCNF_PATHW, szDir, NULL);
+                        GlobalUnlock(hData);
                     }
-                    CoTaskMemFree(path);
                 }
+                CloseClipboard();
+                SHChangeNotify(SHCNE_CREATE, SHCNF_PATHW, szDir, NULL);
             }
         }
     }
+}
+
+IFACEMETHODIMP XToolsSubCommand::Invoke(IShellItemArray* psiItemArray, IBindCtx*)
+{
+    std::vector<std::wstring> paths = GetTargetPaths(psiItemArray, _spUnkSite.Get());
+    HWND hwnd = GetHWNDFromSite(_spUnkSite.Get());
+    ExecuteAction(_action, _title, _data, _exePath, _runAsAdmin, paths, hwnd);
     return S_OK;
 }
 
@@ -739,27 +699,215 @@ IFACEMETHODIMP XToolsCommandEnumerator::Skip(ULONG celt) { _current += celt; ret
 IFACEMETHODIMP XToolsCommandEnumerator::Reset() { _current = 0; return S_OK; }
 IFACEMETHODIMP XToolsCommandEnumerator::Clone(IEnumExplorerCommand** ppenum) { return MakeAndInitialize<XToolsCommandEnumerator>(ppenum); }
 
+// XToolsClassicMenu implementation
+IFACEMETHODIMP XToolsClassicMenu::Initialize(PCIDLIST_ABSOLUTE pidlFolder, IDataObject* pdtobj, HKEY hkeyProgID)
+{
+    _selectedPaths.clear();
+    _isBackground = (pdtobj == nullptr);
+    _isFolder = false;
+
+    if (pdtobj)
+    {
+        FORMATETC fe = { CF_HDROP, NULL, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
+        STGMEDIUM stm;
+        if (SUCCEEDED(pdtobj->GetData(&fe, &stm)))
+        {
+            HDROP hDrop = static_cast<HDROP>(GlobalLock(stm.hGlobal));
+            if (hDrop)
+            {
+                UINT count = DragQueryFileW(hDrop, 0xFFFFFFFF, NULL, 0);
+                for (UINT i = 0; i < count; i++)
+                {
+                    WCHAR szPath[MAX_PATH];
+                    if (DragQueryFileW(hDrop, i, szPath, MAX_PATH))
+                    {
+                        _selectedPaths.push_back(szPath);
+                    }
+                }
+                GlobalUnlock(stm.hGlobal);
+            }
+            ReleaseStgMedium(&stm);
+        }
+    }
+
+    if (_selectedPaths.empty() && pidlFolder)
+    {
+        WCHAR szPath[MAX_PATH];
+        if (SHGetPathFromIDListW(pidlFolder, szPath))
+        {
+            _selectedPaths.push_back(szPath);
+        }
+    }
+
+    if (!_selectedPaths.empty())
+    {
+        DWORD attrs = GetFileAttributesW(_selectedPaths[0].c_str());
+        if (attrs != INVALID_FILE_ATTRIBUTES) _isFolder = (attrs & FILE_ATTRIBUTE_DIRECTORY);
+    }
+
+    return S_OK;
+}
+
+IFACEMETHODIMP XToolsClassicMenu::QueryContextMenu(HMENU hmenu, UINT indexMenu, UINT idCmdFirst, UINT idCmdLast, UINT uFlags)
+{
+    if (uFlags & CMF_DEFAULTONLY) return MAKE_HRESULT(SEVERITY_SUCCESS, FACILITY_NULL, 0);
+
+    for (HBITMAP hbmp : _bitmaps) { if (hbmp) DeleteObject(hbmp); }
+    _bitmaps.clear();
+    _visibleItems.clear();
+
+    std::vector<ClassicMenuItemInternal> allPossibleItems = {
+        { L"Attributes", XToolsAction::OpenExe, L"AttributesDialog.exe", L"", L"Assets\\Attributes.ico", FALSE },
+        { L"Terminal", XToolsAction::Terminal, L"", L"", L"Assets\\Terminals.ico", FALSE },
+        { L"Terminal (admin)", XToolsAction::TerminalAdmin, L"", L"", L"Assets\\Terminals.ico", FALSE },
+        { L"Edit with", XToolsAction::EditWith, L"", L"", L"Assets\\Edit with.ico", FALSE },
+        { L"System Folders", XToolsAction::SystemFolders, L"", L"", L"Assets\\System Folders.ico", FALSE },
+        { L"Paste to File", XToolsAction::PasteToFile, L"", L"", L"Assets\\Paste to File.ico", FALSE },
+        { L"Copy Name", XToolsAction::CopyName, L"", L"", L"Assets\\Copy Name.ico", FALSE },
+        { L"Copy Path", XToolsAction::CopyPath, L"", L"", L"Assets\\Copy Path.ico", FALSE },
+        { L"Take Ownership", XToolsAction::TakeOwnership, L"", L"", L"Assets\\Take Ownership.ico", FALSE }
+    };
+
+    HKEY hKey;
+    if (RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\xToolsMenu\\CustomCommands", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+    {
+        DWORD subKeys;
+        RegQueryInfoKeyW(hKey, NULL, NULL, NULL, &subKeys, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+        for (DWORD i = 0; i < subKeys; i++)
+        {
+            WCHAR name[256]; DWORD nSize = 256;
+            if (RegEnumKeyExW(hKey, i, name, &nSize, NULL, NULL, NULL, NULL) == ERROR_SUCCESS)
+            {
+                WCHAR path[MAX_PATH], args[32768], iconPath[MAX_PATH];
+                DWORD pSize = sizeof(path), aSize = sizeof(args), iSize = sizeof(iconPath), runAsAdmin = 0;
+                DWORD dwSize = sizeof(DWORD);
+                RegGetValueW(hKey, name, L"Path", RRF_RT_REG_SZ, NULL, path, &pSize);
+                RegGetValueW(hKey, name, L"Args", RRF_RT_REG_SZ, NULL, args, &aSize);
+                RegGetValueW(hKey, name, L"RunAsAdmin", RRF_RT_REG_DWORD, NULL, &runAsAdmin, &dwSize);
+
+                bool isDark = DarkModeManager::IsDarkMode();
+                const wchar_t* iconValueName = isDark ? L"IconPath_Dark" : L"IconPath_Light";
+                iSize = sizeof(iconPath);
+                if (RegGetValueW(hKey, name, iconValueName, RRF_RT_REG_SZ, NULL, iconPath, &iSize) != ERROR_SUCCESS || wcslen(iconPath) == 0)
+                {
+                    iSize = sizeof(iconPath);
+                    if (RegGetValueW(hKey, name, L"IconPath", RRF_RT_REG_SZ, NULL, iconPath, &iSize) != ERROR_SUCCESS)
+                    {
+                        wcscpy_s(iconPath, path);
+                    }
+                }
+                allPossibleItems.push_back({ name, XToolsAction::Custom, args, path, iconPath, (BOOL)runAsAdmin });
+            }
+        }
+        RegCloseKey(hKey);
+    }
+    allPossibleItems.push_back({ L"Settings", XToolsAction::Settings, L"", L"", L"Assets\\Settings.ico", FALSE });
+
+    HMENU hSubMenu = CreatePopupMenu();
+    UINT count = 0;
+    for (const auto& item : allPossibleItems)
+    {
+        if (IsCommandVisible(item.action, item.title, false, _isFolder, _isBackground, _selectedPaths))
+        {
+            MENUITEMINFOW mii = { sizeof(mii) };
+            mii.fMask = MIIM_STRING | MIIM_ID;
+            mii.wID = idCmdFirst + count;
+            mii.dwTypeData = (LPWSTR)item.title.c_str();
+
+            HBITMAP hbmp = CreateMenuBitmapFromIcon(item.icon.c_str());
+            if (hbmp)
+            {
+                mii.fMask |= MIIM_BITMAP;
+                mii.hbmpItem = hbmp;
+                _bitmaps.push_back(hbmp);
+            }
+
+            InsertMenuItemW(hSubMenu, count, TRUE, &mii);
+            _visibleItems.push_back(item);
+            count++;
+        }
+    }
+
+    if (count > 0)
+    {
+        MENUITEMINFOW mii = { sizeof(mii) };
+        mii.fMask = MIIM_SUBMENU | MIIM_STRING | MIIM_ID;
+        mii.wID = idCmdFirst + count;
+        mii.hSubMenu = hSubMenu;
+        mii.dwTypeData = (LPWSTR)L"xToolsMenu";
+
+        HBITMAP hbmpRoot = CreateMenuBitmapFromIcon(L"Assets\\ICON.ico");
+        if (hbmpRoot)
+        {
+            mii.fMask |= MIIM_BITMAP;
+            mii.hbmpItem = hbmpRoot;
+            _bitmaps.push_back(hbmpRoot);
+        }
+
+        InsertMenuItemW(hmenu, indexMenu, TRUE, &mii);
+        return MAKE_HRESULT(SEVERITY_SUCCESS, FACILITY_NULL, count + 1);
+    }
+
+    DestroyMenu(hSubMenu);
+    return MAKE_HRESULT(SEVERITY_SUCCESS, FACILITY_NULL, 0);
+}
+
+
+IFACEMETHODIMP XToolsClassicMenu::InvokeCommand(LPCMINVOKECOMMANDINFO lpici)
+{
+    if (HIWORD(lpici->lpVerb) != 0) return E_INVALIDARG;
+    UINT id = LOWORD(lpici->lpVerb);
+    if (id < _visibleItems.size())
+    {
+        const auto& item = _visibleItems[id];
+        ExecuteAction(item.action, item.title, item.data, item.exePath, item.runAsAdmin, _selectedPaths, lpici->hwnd);
+        return S_OK;
+    }
+    return E_INVALIDARG;
+}
+
+IFACEMETHODIMP XToolsClassicMenu::GetCommandString(UINT_PTR idCmd, UINT uType, UINT* pwReserved, LPSTR pszName, UINT cchMax)
+{
+    return E_NOTIMPL;
+}
+
 class XToolsClassFactory : public RuntimeClass<RuntimeClassFlags<ClassicCom>, IClassFactory>
 {
 public:
+    HRESULT RuntimeClassInitialize(REFCLSID rclsid) { _rclsid = rclsid; return S_OK; }
+
     IFACEMETHODIMP CreateInstance(IUnknown* pUnkOuter, REFIID riid, void** ppvObject) override
     {
         *ppvObject = nullptr; if (pUnkOuter) return CLASS_E_NOAGGREGATION;
-        ComPtr<XToolsMenuCommand> instance;
-        HRESULT hr = MakeAndInitialize<XToolsMenuCommand>(&instance);
-        if (SUCCEEDED(hr)) hr = instance.CopyTo(riid, ppvObject);
-        return hr;
+        if (_rclsid == __uuidof(XToolsMenuCommand))
+        {
+            ComPtr<XToolsMenuCommand> instance;
+            HRESULT hr = MakeAndInitialize<XToolsMenuCommand>(&instance);
+            if (SUCCEEDED(hr)) hr = instance.CopyTo(riid, ppvObject);
+            return hr;
+        }
+        else if (_rclsid == __uuidof(XToolsClassicMenu))
+        {
+            ComPtr<XToolsClassicMenu> instance;
+            HRESULT hr = MakeAndInitialize<XToolsClassicMenu>(&instance);
+            if (SUCCEEDED(hr)) hr = instance.CopyTo(riid, ppvObject);
+            return hr;
+        }
+        return E_NOINTERFACE;
     }
     IFACEMETHODIMP LockServer(BOOL fLock) override { return S_OK; }
+
+private:
+    CLSID _rclsid;
 };
 
 STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, void** ppv)
 {
     *ppv = nullptr;
-    if (rclsid == __uuidof(XToolsMenuCommand))
+    if (rclsid == __uuidof(XToolsMenuCommand) || rclsid == __uuidof(XToolsClassicMenu))
     {
         ComPtr<XToolsClassFactory> factory;
-        HRESULT hr = MakeAndInitialize<XToolsClassFactory>(&factory);
+        HRESULT hr = MakeAndInitialize<XToolsClassFactory>(&factory, rclsid);
         if (SUCCEEDED(hr)) hr = factory.CopyTo(riid, ppv);
         return hr;
     }

@@ -16,8 +16,10 @@
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "comdlg32.lib")
 
-HWND g_hTab = nullptr;
+HWND g_hSidebar = nullptr;
+HWND g_hPageContent = nullptr;
 HFONT g_hFont = nullptr;
+HWND g_hHeaderCommand = nullptr, g_hHeaderNew = nullptr, g_hHeaderOld = nullptr;
 
 const wchar_t* REG_PATH = L"Software\\xToolsMenu\\Settings";
 const wchar_t* REG_CUSTOM = L"Software\\xToolsMenu\\CustomCommands";
@@ -25,7 +27,9 @@ const wchar_t* REG_CUSTOM = L"Software\\xToolsMenu\\CustomCommands";
 struct SettingItem {
     std::wstring label;
     std::wstring regValue;
-    HWND hWnd = nullptr;
+    HWND hWndLabel = nullptr;
+    HWND hWndNew = nullptr;
+    HWND hWndOld = nullptr;
     bool isCustom = false;
 };
 
@@ -57,8 +61,6 @@ std::vector<SettingItem> g_bgSettings = {
 };
 
 // Custom Tab Controls
-HWND g_hViewport = nullptr;
-HWND g_hPageContent = nullptr;
 HWND g_hComboCustom = nullptr;
 HWND g_hEditName = nullptr, g_hEditPath = nullptr, g_hEditArgs = nullptr, g_hEditIconLight = nullptr, g_hEditIconDark = nullptr;
 HWND g_hBtnAdd = nullptr, g_hBtnEdit = nullptr, g_hBtnDel = nullptr, g_hBtnBrowse = nullptr, g_hBtnBrowseIconLight = nullptr, g_hBtnBrowseIconDark = nullptr;
@@ -68,7 +70,8 @@ std::map<FileTypeCategory, HWND> g_hFileTypeChecks;
 HWND g_hBtnBackup = nullptr, g_hBtnRestore = nullptr;
 
 bool GetSetting(const wchar_t* name) {
-    DWORD value = 1, size = sizeof(value);
+    DWORD defaultValue = (wcsstr(name, L"_Old") != nullptr) ? 0 : 1;
+    DWORD value = defaultValue, size = sizeof(value);
     RegGetValueW(HKEY_CURRENT_USER, REG_PATH, name, RRF_RT_REG_DWORD, NULL, &value, &size);
     return value != 0;
 }
@@ -83,73 +86,11 @@ void SetSetting(const wchar_t* name, bool enabled) {
 }
 
 LRESULT CALLBACK ForwardMouseWheelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
-    if (uMsg == WM_MOUSEWHEEL) {
-        return SendMessage(g_hViewport, uMsg, wParam, lParam);
-    }
-    return DefSubclassProc(hwnd, uMsg, wParam, lParam);
-}
-
-LRESULT CALLBACK ViewportProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
-    switch (uMsg) {
-    case WM_VSCROLL: {
-        SCROLLINFO si = { sizeof(si), SIF_ALL };
-        GetScrollInfo(hwnd, SB_VERT, &si);
-        int oldPos = si.nPos;
-        switch (LOWORD(wParam)) {
-        case SB_TOP: si.nPos = si.nMin; break;
-        case SB_BOTTOM: si.nPos = si.nMax; break;
-        case SB_LINEUP: si.nPos -= 20; break;
-        case SB_LINEDOWN: si.nPos += 20; break;
-        case SB_PAGEUP: si.nPos -= si.nPage; break;
-        case SB_PAGEDOWN: si.nPos += si.nPage; break;
-        case SB_THUMBTRACK: si.nPos = si.nTrackPos; break;
-        }
-        si.fMask = SIF_POS;
-        SetScrollInfo(hwnd, SB_VERT, &si, TRUE);
-        GetScrollInfo(hwnd, SB_VERT, &si);
-        if (si.nPos != oldPos) {
-            SetWindowPos(g_hPageContent, NULL, 0, -si.nPos, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
-        }
-        return 0;
-    }
-    case WM_MOUSEWHEEL: {
-        int delta = GET_WHEEL_DELTA_WPARAM(wParam);
-        UINT scrollLines = 3;
-        SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &scrollLines, 0);
-        if (scrollLines == WHEEL_PAGESCROLL) {
-            SendMessage(hwnd, WM_VSCROLL, delta > 0 ? SB_PAGEUP : SB_PAGEDOWN, 0);
-        } else {
-            int numLines = (abs(delta) * (int)scrollLines) / WHEEL_DELTA;
-            if (numLines == 0 && delta != 0) numLines = 1;
-            for (int i = 0; i < numLines; i++) {
-                SendMessage(hwnd, WM_VSCROLL, delta > 0 ? SB_LINEUP : SB_LINEDOWN, 0);
-            }
-        }
-        return 0;
-    }
-    case WM_COMMAND:
-    case WM_NOTIFY:
-    case WM_CTLCOLORDLG:
-    case WM_CTLCOLORSTATIC:
-    case WM_CTLCOLOREDIT:
-    case WM_CTLCOLORLISTBOX:
-    case WM_CTLCOLORBTN:
-        return SendMessage(GetParent(hwnd), uMsg, wParam, lParam);
-    case WM_ERASEBKGND:
-        if (DarkModeManager::IsDarkMode()) {
-            RECT rc; GetClientRect(hwnd, &rc);
-            FillRect((HDC)wParam, &rc, DarkModeManager::GetBackgroundBrush());
-            return TRUE;
-        }
-        break;
-    }
     return DefSubclassProc(hwnd, uMsg, wParam, lParam);
 }
 
 LRESULT CALLBACK PageContentProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
     switch (uMsg) {
-    case WM_MOUSEWHEEL:
-        return SendMessage(GetParent(hwnd), uMsg, wParam, lParam);
     case WM_COMMAND:
     case WM_NOTIFY:
     case WM_CTLCOLORDLG:
@@ -167,24 +108,6 @@ LRESULT CALLBACK PageContentProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lPa
         break;
     }
     return DefSubclassProc(hwnd, uMsg, wParam, lParam);
-}
-
-void UpdateScroll(int totalHeight) {
-    RECT rc; GetClientRect(g_hViewport, &rc);
-    SCROLLINFO si = { sizeof(si) };
-    si.fMask = SIF_RANGE | SIF_PAGE;
-    si.nMin = 0; si.nMax = totalHeight; si.nPage = rc.bottom;
-    SetScrollInfo(g_hViewport, SB_VERT, &si, TRUE);
-
-    // Show/Hide scrollbar based on content height
-    ShowScrollBar(g_hViewport, SB_VERT, totalHeight > rc.bottom);
-
-    int pos = GetScrollPos(g_hViewport, SB_VERT);
-    if (pos > si.nMax - (int)si.nPage) {
-        int newPos = max(0, si.nMax - (int)si.nPage);
-        SetScrollPos(g_hViewport, SB_VERT, newPos, TRUE);
-        SetWindowPos(g_hPageContent, NULL, 0, -newPos, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
-    }
 }
 
 void LoadCustomCommands() {
@@ -226,7 +149,6 @@ void SelectCustomCommand() {
     SendMessage(g_hComboCustom, CB_GETLBTEXT, sel, (LPARAM)name);
     SetWindowTextW(g_hEditName, name);
 
-    HKEY hKey;
     std::wstring subPath = std::wstring(REG_CUSTOM) + L"\\" + name;
     WCHAR path[MAX_PATH] = { 0 }, args[32768] = { 0 }, iconPath[MAX_PATH] = { 0 }, iconPathLight[MAX_PATH] = { 0 }, iconPathDark[MAX_PATH] = { 0 };
     DWORD pSize = sizeof(path), aSize = sizeof(args), iSize = sizeof(iconPath), iLightSize = sizeof(iconPathLight), iDarkSize = sizeof(iconPathDark);
@@ -263,22 +185,24 @@ void SelectCustomCommand() {
     }
 }
 
-void UpdateTabVisibility() {
-    int sel = TabCtrl_GetCurSel(g_hTab);
-
-    // Reset scroll
-    SetScrollPos(g_hViewport, SB_VERT, 0, TRUE);
-    SetWindowPos(g_hPageContent, NULL, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
+void UpdateSidebarVisibility() {
+    int sel = (int)SendMessage(g_hSidebar, LB_GETCURSEL, 0, 0);
+    if (sel == LB_ERR) return;
 
     auto ToggleGroup = [&](std::vector<SettingItem>& group, bool show) {
-        for (auto& item : group) ShowWindow(item.hWnd, show ? SW_SHOW : SW_HIDE);
+        for (auto& item : group) {
+            if (item.hWndLabel) ShowWindow(item.hWndLabel, show ? SW_SHOW : SW_HIDE);
+            if (item.hWndNew) ShowWindow(item.hWndNew, show ? SW_SHOW : SW_HIDE);
+            if (item.hWndOld) ShowWindow(item.hWndOld, show ? SW_SHOW : SW_HIDE);
+        }
     };
-    // Destroy custom entries dynamically created on previous views to load updated states
     auto ClearCustomCheckboxes = [&](std::vector<SettingItem>& group) {
         auto it = group.begin();
         while (it != group.end()) {
             if (it->isCustom) {
-                if (it->hWnd) DestroyWindow(it->hWnd);
+                if (it->hWndLabel) DestroyWindow(it->hWndLabel);
+                if (it->hWndNew) DestroyWindow(it->hWndNew);
+                if (it->hWndOld) DestroyWindow(it->hWndOld);
                 it = group.erase(it);
             } else {
                 ++it;
@@ -287,75 +211,133 @@ void UpdateTabVisibility() {
     };
 
     int maxY = 0;
+    int col1X = 20, col2X = 320;
+    int yStart = 40;
+
     if (sel < 3) {
         ClearCustomCheckboxes(g_fileSettings);
         ClearCustomCheckboxes(g_dirSettings);
         ClearCustomCheckboxes(g_bgSettings);
 
-        HINSTANCE hInst = (HINSTANCE)GetWindowLongPtrW(g_hTab, GWLP_HINSTANCE);
+        HINSTANCE hInst = (HINSTANCE)GetWindowLongPtrW(g_hSidebar, GWLP_HINSTANCE);
         HKEY hKey;
         if (RegOpenKeyExW(HKEY_CURRENT_USER, REG_CUSTOM, 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
             DWORD subKeys;
             RegQueryInfoKeyW(hKey, NULL, NULL, NULL, &subKeys, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
-            int yFile = 10 + (int)(g_fileSettings.size() * 30);
-            int yDir = 10 + (int)(g_dirSettings.size() * 30);
-            int yBg = 10 + (int)(g_bgSettings.size() * 30);
+
+            auto& currentGroup = (sel == 0) ? g_fileSettings : (sel == 1 ? g_dirSettings : g_bgSettings);
+            std::wstring enabledVal = (sel == 0) ? L"Enabled_Files" : (sel == 1 ? L"Enabled_Directory" : L"Enabled_Background");
 
             for (DWORD i = 0; i < subKeys; i++) {
                 WCHAR name[256];
                 DWORD nameSize = 256;
                 if (RegEnumKeyExW(hKey, i, name, &nameSize, NULL, NULL, NULL, NULL) == ERROR_SUCCESS) {
                     std::wstring subPath = std::wstring(REG_CUSTOM) + L"\\" + name;
-                    DWORD f = 1, d = 1, b = 1, dwSize = sizeof(DWORD);
-                    RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), L"ShowFile", RRF_RT_REG_DWORD, NULL, &f, &dwSize);
-                    RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), L"ShowDir", RRF_RT_REG_DWORD, NULL, &d, &dwSize);
-                    RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), L"ShowBG", RRF_RT_REG_DWORD, NULL, &b, &dwSize);
+                    DWORD show = 1, dwSize = sizeof(DWORD);
+                    std::wstring showVal = (sel == 0) ? L"ShowFile" : (sel == 1 ? L"ShowDir" : L"ShowBG");
+                    RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), showVal.c_str(), RRF_RT_REG_DWORD, NULL, &show, &dwSize);
 
-                    DWORD enabledFile = 1, enabledDir = 1, enabledBg = 1;
-                    RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), L"Enabled_Files", RRF_RT_REG_DWORD, NULL, &enabledFile, &dwSize);
-                    RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), L"Enabled_Directory", RRF_RT_REG_DWORD, NULL, &enabledDir, &dwSize);
-                    RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), L"Enabled_Background", RRF_RT_REG_DWORD, NULL, &enabledBg, &dwSize);
+                    if (show) {
+                        SettingItem item = { name, std::wstring(name), nullptr, nullptr, nullptr, true };
+                        item.hWndLabel = CreateWindowW(L"STATIC", name, WS_CHILD, 0, 0, 0, 0, g_hPageContent, NULL, hInst, NULL);
+                        item.hWndNew = CreateWindowW(L"BUTTON", L"", WS_CHILD | BS_AUTOCHECKBOX, 0, 0, 0, 0, g_hPageContent, NULL, hInst, NULL);
+                        item.hWndOld = CreateWindowW(L"BUTTON", L"", WS_CHILD | BS_AUTOCHECKBOX, 0, 0, 0, 0, g_hPageContent, NULL, hInst, NULL);
 
-                    if (sel == 0 && f) {
-                        SettingItem item = { name, std::wstring(name), nullptr, true };
-                        item.hWnd = CreateWindowW(L"BUTTON", name, WS_CHILD | BS_AUTOCHECKBOX, 20, yFile, 300, 25, g_hPageContent, NULL, hInst, NULL);
-                        SendMessage(item.hWnd, WM_SETFONT, (WPARAM)g_hFont, TRUE);
-                        SendMessage(item.hWnd, BM_SETCHECK, enabledFile ? BST_CHECKED : BST_UNCHECKED, 0);
-                        SetWindowSubclass(item.hWnd, ForwardMouseWheelProc, 1, 0);
-                        g_fileSettings.push_back(item);
-                        yFile += 30;
-                    }
-                    if (sel == 1 && d) {
-                        SettingItem item = { name, std::wstring(name), nullptr, true };
-                        item.hWnd = CreateWindowW(L"BUTTON", name, WS_CHILD | BS_AUTOCHECKBOX, 20, yDir, 300, 25, g_hPageContent, NULL, hInst, NULL);
-                        SendMessage(item.hWnd, WM_SETFONT, (WPARAM)g_hFont, TRUE);
-                        SendMessage(item.hWnd, BM_SETCHECK, enabledDir ? BST_CHECKED : BST_UNCHECKED, 0);
-                        SetWindowSubclass(item.hWnd, ForwardMouseWheelProc, 1, 0);
-                        g_dirSettings.push_back(item);
-                        yDir += 30;
-                    }
-                    if (sel == 2 && b) {
-                        SettingItem item = { name, std::wstring(name), nullptr, true };
-                        item.hWnd = CreateWindowW(L"BUTTON", name, WS_CHILD | BS_AUTOCHECKBOX, 20, yBg, 300, 25, g_hPageContent, NULL, hInst, NULL);
-                        SendMessage(item.hWnd, WM_SETFONT, (WPARAM)g_hFont, TRUE);
-                        SendMessage(item.hWnd, BM_SETCHECK, enabledBg ? BST_CHECKED : BST_UNCHECKED, 0);
-                        SetWindowSubclass(item.hWnd, ForwardMouseWheelProc, 1, 0);
-                        g_bgSettings.push_back(item);
-                        yBg += 30;
+                        DWORD enabledNew = 1, enabledOld = 0;
+                        dwSize = sizeof(DWORD);
+                        RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), enabledVal.c_str(), RRF_RT_REG_DWORD, NULL, &enabledNew, &dwSize);
+                        RegGetValueW(HKEY_CURRENT_USER, subPath.c_str(), (enabledVal + L"_Old").c_str(), RRF_RT_REG_DWORD, NULL, &enabledOld, &dwSize);
+
+                        SendMessage(item.hWndLabel, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+                        SendMessage(item.hWndNew, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+                        SendMessage(item.hWndOld, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+                        SendMessage(item.hWndNew, BM_SETCHECK, enabledNew ? BST_CHECKED : BST_UNCHECKED, 0);
+                        SendMessage(item.hWndOld, BM_SETCHECK, enabledOld ? BST_CHECKED : BST_UNCHECKED, 0);
+                        currentGroup.push_back(item);
                     }
                 }
             }
             RegCloseKey(hKey);
-            if (sel == 0) maxY = yFile;
-            else if (sel == 1) maxY = yDir;
-            else if (sel == 2) maxY = yBg;
+
+            // Re-layout standard and custom items in 2 columns
+            auto LayoutGroup = [&](std::vector<SettingItem>& group) {
+                int y = yStart;
+                for (size_t i = 0; i < group.size(); ++i) {
+                    int x = (i % 2 == 0) ? col1X : col2X;
+                    SetWindowPos(group[i].hWndLabel, NULL, x, y + 3, 200, 25, SWP_NOZORDER | SWP_SHOWWINDOW);
+                    SetWindowPos(group[i].hWndNew, NULL, x + 215, y, 25, 25, SWP_NOZORDER | SWP_SHOWWINDOW);
+                    SetWindowPos(group[i].hWndOld, NULL, x + 265, y, 25, 25, SWP_NOZORDER | SWP_SHOWWINDOW);
+                    if (i % 2 == 1 || i == group.size() - 1) y += 35;
+                }
+                return y;
+            };
+
+            maxY = LayoutGroup(currentGroup);
+
+            // Update header positions
+            SetWindowPos(g_hHeaderCommand, NULL, col1X, 10, 200, 20, SWP_NOZORDER);
+            SetWindowPos(g_hHeaderNew, NULL, col1X + 215, 10, 60, 20, SWP_NOZORDER);
+            SetWindowPos(g_hHeaderOld, NULL, col1X + 265, 10, 60, 20, SWP_NOZORDER);
         }
         DarkModeManager::ApplyToControls(g_hPageContent);
     } else {
-        maxY = 500;
+        // Layout Custom tab side-by-side
+        int leftX = 20, rightX = 350;
+        int y = 20;
+        SetWindowPos(g_hStaticSelect, NULL, leftX, y + 3, 100, 20, SWP_NOZORDER | SWP_SHOWWINDOW);
+        SetWindowPos(g_hComboCustom, NULL, leftX + 110, y, 200, 200, SWP_NOZORDER | SWP_SHOWWINDOW);
+        y += 40;
+        SetWindowPos(g_hStaticName, NULL, leftX, y + 3, 100, 20, SWP_NOZORDER | SWP_SHOWWINDOW);
+        SetWindowPos(g_hEditName, NULL, leftX + 110, y, 200, 25, SWP_NOZORDER | SWP_SHOWWINDOW);
+        y += 35;
+        SetWindowPos(g_hStaticPath, NULL, leftX, y + 3, 100, 20, SWP_NOZORDER | SWP_SHOWWINDOW);
+        SetWindowPos(g_hEditPath, NULL, leftX + 110, y, 165, 25, SWP_NOZORDER | SWP_SHOWWINDOW);
+        SetWindowPos(g_hBtnBrowse, NULL, leftX + 275, y, 35, 25, SWP_NOZORDER | SWP_SHOWWINDOW);
+        y += 35;
+        SetWindowPos(g_hStaticArgs, NULL, leftX, y + 3, 100, 20, SWP_NOZORDER | SWP_SHOWWINDOW);
+        SetWindowPos(g_hEditArgs, NULL, leftX + 110, y, 200, 25, SWP_NOZORDER | SWP_SHOWWINDOW);
+        y += 35;
+        SetWindowPos(g_hStaticIconLight, NULL, leftX, y + 3, 100, 20, SWP_NOZORDER | SWP_SHOWWINDOW);
+        SetWindowPos(g_hEditIconLight, NULL, leftX + 110, y, 165, 25, SWP_NOZORDER | SWP_SHOWWINDOW);
+        SetWindowPos(g_hBtnBrowseIconLight, NULL, leftX + 275, y, 35, 25, SWP_NOZORDER | SWP_SHOWWINDOW);
+        y += 35;
+        SetWindowPos(g_hStaticIconDark, NULL, leftX, y + 3, 100, 20, SWP_NOZORDER | SWP_SHOWWINDOW);
+        SetWindowPos(g_hEditIconDark, NULL, leftX + 110, y, 165, 25, SWP_NOZORDER | SWP_SHOWWINDOW);
+        SetWindowPos(g_hBtnBrowseIconDark, NULL, leftX + 275, y, 35, 25, SWP_NOZORDER | SWP_SHOWWINDOW);
+        y += 40;
+
+        SetWindowPos(g_hChkFile, NULL, leftX, y, 60, 25, SWP_NOZORDER | SWP_SHOWWINDOW);
+        SetWindowPos(g_hChkDir, NULL, leftX + 70, y, 90, 25, SWP_NOZORDER | SWP_SHOWWINDOW);
+        SetWindowPos(g_hChkBG, NULL, leftX + 170, y, 100, 25, SWP_NOZORDER | SWP_SHOWWINDOW);
+        y += 30;
+        SetWindowPos(g_hChkAdmin, NULL, leftX, y, 200, 25, SWP_NOZORDER | SWP_SHOWWINDOW);
+
+        // Right side: File types and Buttons
+        y = 20;
+        HWND hStaticTypes = FindWindowExW(g_hPageContent, NULL, L"STATIC", L"File Types (only for 'File' target):");
+        SetWindowPos(hStaticTypes, NULL, rightX, y, 280, 20, SWP_NOZORDER | SWP_SHOWWINDOW);
+        y += 30;
+        int typeY = y;
+        int i = 0;
+        for (auto& pair : g_hFileTypeChecks) {
+            SetWindowPos(pair.second, NULL, rightX + (i % 2) * 140, typeY + (i / 2) * 25, 130, 22, SWP_NOZORDER | SWP_SHOWWINDOW);
+            i++;
+        }
+        y += 130;
+
+        SetWindowPos(g_hBtnAdd, NULL, rightX, y, 90, 30, SWP_NOZORDER | SWP_SHOWWINDOW);
+        SetWindowPos(g_hBtnEdit, NULL, rightX + 95, y, 90, 30, SWP_NOZORDER | SWP_SHOWWINDOW);
+        SetWindowPos(g_hBtnDel, NULL, rightX + 190, y, 90, 30, SWP_NOZORDER | SWP_SHOWWINDOW);
+        y += 40;
+        SetWindowPos(g_hBtnBackup, NULL, rightX, y, 135, 30, SWP_NOZORDER | SWP_SHOWWINDOW);
+        SetWindowPos(g_hBtnRestore, NULL, rightX + 140, y, 135, 30, SWP_NOZORDER | SWP_SHOWWINDOW);
+
         DarkModeManager::ApplyToControls(g_hPageContent);
     }
-    UpdateScroll(maxY);
+
+    ShowWindow(g_hHeaderCommand, sel < 3 ? SW_SHOW : SW_HIDE);
+    ShowWindow(g_hHeaderNew, sel < 3 ? SW_SHOW : SW_HIDE);
+    ShowWindow(g_hHeaderOld, sel < 3 ? SW_SHOW : SW_HIDE);
 
     ToggleGroup(g_fileSettings, sel == 0);
     ToggleGroup(g_dirSettings, sel == 1);
@@ -386,6 +368,10 @@ void UpdateTabVisibility() {
     for (auto& pair : g_hFileTypeChecks) ShowWindow(pair.second, bCustom ? SW_SHOW : SW_HIDE);
     ShowWindow(g_hBtnBackup, bCustom ? SW_SHOW : SW_HIDE);
     ShowWindow(g_hBtnRestore, bCustom ? SW_SHOW : SW_HIDE);
+
+    // Also need to hide the "File Types" static label
+    HWND hStaticTypes = FindWindowExW(g_hPageContent, NULL, L"STATIC", L"File Types (only for 'File' target):");
+    if (hStaticTypes) ShowWindow(hStaticTypes, bCustom ? SW_SHOW : SW_HIDE);
 }
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -398,105 +384,90 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         ReleaseDC(hwnd, hdc);
         g_hFont = CreateFontW(logHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
 
-        g_hTab = CreateWindowW(WC_TABCONTROLW, L"", WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | TCS_OWNERDRAWFIXED, 10, 10, 380, 410, hwnd, NULL, hInst, NULL);
-        DarkModeManager::FixTabControl(g_hTab);
-        SendMessage(g_hTab, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+        g_hSidebar = CreateWindowExW(WS_EX_CLIENTEDGE, L"LISTBOX", L"", WS_CHILD | WS_VISIBLE | LBS_NOTIFY | LBS_OWNERDRAWFIXED | LBS_HASSTRINGS, 10, 10, 180, 540, hwnd, (HMENU)500, hInst, NULL);
+        SendMessage(g_hSidebar, LB_ADDSTRING, 0, (LPARAM)L"Files");
+        SendMessage(g_hSidebar, LB_ADDSTRING, 0, (LPARAM)L"Directory");
+        SendMessage(g_hSidebar, LB_ADDSTRING, 0, (LPARAM)L"Background");
+        SendMessage(g_hSidebar, LB_ADDSTRING, 0, (LPARAM)L"Custom");
+        SendMessage(g_hSidebar, LB_SETCURSEL, 0, 0);
+        SendMessage(g_hSidebar, WM_SETFONT, (WPARAM)g_hFont, TRUE);
 
-        g_hViewport = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_CLIPCHILDREN, 12, 42, 376, 375, hwnd, NULL, hInst, NULL);
-        SetWindowSubclass(g_hViewport, ViewportProc, 0, 0);
-        if (DarkModeManager::IsDarkMode()) SetWindowTheme(g_hViewport, L"DarkMode_Explorer", NULL);
-
-        g_hPageContent = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE, 0, 0, 376, 1000, g_hViewport, NULL, hInst, NULL);
+        g_hPageContent = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE, 200, 10, 630, 540, hwnd, NULL, hInst, NULL);
         SetWindowSubclass(g_hPageContent, PageContentProc, 0, 0);
 
-        TCITEMW tie = { TCIF_TEXT };
-        tie.pszText = (LPWSTR)L"Files"; TabCtrl_InsertItem(g_hTab, 0, &tie);
-        tie.pszText = (LPWSTR)L"Directory"; TabCtrl_InsertItem(g_hTab, 1, &tie);
-        tie.pszText = (LPWSTR)L"Directory Background"; TabCtrl_InsertItem(g_hTab, 2, &tie);
-        tie.pszText = (LPWSTR)L"Custom"; TabCtrl_InsertItem(g_hTab, 3, &tie);
+        g_hHeaderCommand = CreateWindowW(L"STATIC", L"Command", WS_CHILD | WS_VISIBLE, 0, 0, 0, 0, g_hPageContent, NULL, hInst, NULL);
+        g_hHeaderNew = CreateWindowW(L"STATIC", L"New", WS_CHILD | WS_VISIBLE, 0, 0, 0, 0, g_hPageContent, NULL, hInst, NULL);
+        g_hHeaderOld = CreateWindowW(L"STATIC", L"Classic", WS_CHILD | WS_VISIBLE, 0, 0, 0, 0, g_hPageContent, NULL, hInst, NULL);
+        SendMessage(g_hHeaderCommand, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+        SendMessage(g_hHeaderNew, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+        SendMessage(g_hHeaderOld, WM_SETFONT, (WPARAM)g_hFont, TRUE);
 
         auto CreateCheckboxes = [&](std::vector<SettingItem>& group) {
-            int y = 10;
             for (auto& item : group) {
-                item.hWnd = CreateWindowW(L"BUTTON", item.label.c_str(), WS_CHILD | BS_AUTOCHECKBOX, 20, y, 300, 25, g_hPageContent, NULL, hInst, NULL);
-                SendMessage(item.hWnd, WM_SETFONT, (WPARAM)g_hFont, TRUE);
-                SendMessage(item.hWnd, BM_SETCHECK, GetSetting(item.regValue.c_str()) ? BST_CHECKED : BST_UNCHECKED, 0);
-                y += 30;
+                item.hWndLabel = CreateWindowW(L"STATIC", item.label.c_str(), WS_CHILD, 0, 0, 0, 0, g_hPageContent, NULL, hInst, NULL);
+                item.hWndNew = CreateWindowW(L"BUTTON", L"", WS_CHILD | BS_AUTOCHECKBOX, 0, 0, 0, 0, g_hPageContent, NULL, hInst, NULL);
+                item.hWndOld = CreateWindowW(L"BUTTON", L"", WS_CHILD | BS_AUTOCHECKBOX, 0, 0, 0, 0, g_hPageContent, NULL, hInst, NULL);
+
+                SendMessage(item.hWndLabel, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+                SendMessage(item.hWndNew, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+                SendMessage(item.hWndOld, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+
+                SendMessage(item.hWndNew, BM_SETCHECK, GetSetting(item.regValue.c_str()) ? BST_CHECKED : BST_UNCHECKED, 0);
+                SendMessage(item.hWndOld, BM_SETCHECK, GetSetting((item.regValue + L"_Old").c_str()) ? BST_CHECKED : BST_UNCHECKED, 0);
             }
         };
         CreateCheckboxes(g_fileSettings);
         CreateCheckboxes(g_dirSettings);
         CreateCheckboxes(g_bgSettings);
 
-        int y = 10;
-        int labelX = 15, inputX = 90, fieldW = 250;
+        g_hStaticSelect = CreateWindowW(L"STATIC", L"Select Entry:", WS_CHILD, 0, 0, 0, 0, g_hPageContent, NULL, hInst, NULL);
+        g_hComboCustom = CreateWindowW(WC_COMBOBOXW, L"", WS_CHILD | CBS_DROPDOWNLIST | WS_VSCROLL, 0, 0, 0, 0, g_hPageContent, (HMENU)200, hInst, NULL);
+        g_hStaticName = CreateWindowW(L"STATIC", L"Name:", WS_CHILD, 0, 0, 0, 0, g_hPageContent, NULL, hInst, NULL);
+        g_hEditName = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, 0, 0, 0, 0, g_hPageContent, NULL, hInst, NULL);
+        g_hStaticPath = CreateWindowW(L"STATIC", L"Path:", WS_CHILD, 0, 0, 0, 0, g_hPageContent, NULL, hInst, NULL);
+        g_hEditPath = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, 0, 0, 0, 0, g_hPageContent, NULL, hInst, NULL);
+        g_hBtnBrowse = CreateWindowW(L"BUTTON", L"...", WS_CHILD, 0, 0, 0, 0, g_hPageContent, (HMENU)102, hInst, NULL);
+        g_hStaticArgs = CreateWindowW(L"STATIC", L"Args:", WS_CHILD, 0, 0, 0, 0, g_hPageContent, NULL, hInst, NULL);
+        g_hEditArgs = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, 0, 0, 0, 0, g_hPageContent, NULL, hInst, NULL);
+        g_hStaticIconLight = CreateWindowW(L"STATIC", L"Light Icon:", WS_CHILD, 0, 0, 0, 0, g_hPageContent, NULL, hInst, NULL);
+        g_hEditIconLight = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, 0, 0, 0, 0, g_hPageContent, NULL, hInst, NULL);
+        g_hBtnBrowseIconLight = CreateWindowW(L"BUTTON", L"...", WS_CHILD, 0, 0, 0, 0, g_hPageContent, (HMENU)104, hInst, NULL);
+        g_hStaticIconDark = CreateWindowW(L"STATIC", L"Dark Icon:", WS_CHILD, 0, 0, 0, 0, g_hPageContent, NULL, hInst, NULL);
+        g_hEditIconDark = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, 0, 0, 0, 0, g_hPageContent, NULL, hInst, NULL);
+        g_hBtnBrowseIconDark = CreateWindowW(L"BUTTON", L"...", WS_CHILD, 0, 0, 0, 0, g_hPageContent, (HMENU)107, hInst, NULL);
+        g_hChkFile = CreateWindowW(L"BUTTON", L"File", WS_CHILD | BS_AUTOCHECKBOX, 0, 0, 0, 0, g_hPageContent, NULL, hInst, NULL);
+        g_hChkDir = CreateWindowW(L"BUTTON", L"Directory", WS_CHILD | BS_AUTOCHECKBOX, 0, 0, 0, 0, g_hPageContent, NULL, hInst, NULL);
+        g_hChkBG = CreateWindowW(L"BUTTON", L"Background", WS_CHILD | BS_AUTOCHECKBOX, 0, 0, 0, 0, g_hPageContent, NULL, hInst, NULL);
+        g_hChkAdmin = CreateWindowW(L"BUTTON", L"Run as administrator", WS_CHILD | BS_AUTOCHECKBOX, 0, 0, 0, 0, g_hPageContent, NULL, hInst, NULL);
 
-        g_hStaticSelect = CreateWindowW(L"STATIC", L"Select Entry:", WS_CHILD, labelX, y + 3, 75, 20, g_hPageContent, NULL, hInst, NULL);
-        g_hComboCustom = CreateWindowW(WC_COMBOBOXW, L"", WS_CHILD | CBS_DROPDOWNLIST | WS_VSCROLL, inputX, y, fieldW, 200, g_hPageContent, (HMENU)200, hInst, NULL);
-        y += 32;
-        g_hStaticName = CreateWindowW(L"STATIC", L"Name:", WS_CHILD, labelX, y + 3, 75, 20, g_hPageContent, NULL, hInst, NULL);
-        g_hEditName = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, inputX, y, fieldW, 25, g_hPageContent, NULL, hInst, NULL);
-        y += 28;
-        g_hStaticPath = CreateWindowW(L"STATIC", L"Path:", WS_CHILD, labelX, y + 3, 75, 20, g_hPageContent, NULL, hInst, NULL);
-        g_hEditPath = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, inputX, y, fieldW - 40, 25, g_hPageContent, NULL, hInst, NULL);
-        g_hBtnBrowse = CreateWindowW(L"BUTTON", L"...", WS_CHILD, inputX + fieldW - 35, y, 35, 25, g_hPageContent, (HMENU)102, hInst, NULL);
-        y += 28;
-        g_hStaticArgs = CreateWindowW(L"STATIC", L"Args:", WS_CHILD, labelX, y + 3, 75, 20, g_hPageContent, NULL, hInst, NULL);
-        g_hEditArgs = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, inputX, y, fieldW, 25, g_hPageContent, NULL, hInst, NULL);
-        y += 28;
-        g_hStaticIconLight = CreateWindowW(L"STATIC", L"Light Icon:", WS_CHILD, labelX, y + 3, 75, 20, g_hPageContent, NULL, hInst, NULL);
-        g_hEditIconLight = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, inputX, y, fieldW - 40, 25, g_hPageContent, NULL, hInst, NULL);
-        g_hBtnBrowseIconLight = CreateWindowW(L"BUTTON", L"...", WS_CHILD, inputX + fieldW - 35, y, 35, 25, g_hPageContent, (HMENU)104, hInst, NULL);
-        y += 28;
-        g_hStaticIconDark = CreateWindowW(L"STATIC", L"Dark Icon:", WS_CHILD, labelX, y + 3, 75, 20, g_hPageContent, NULL, hInst, NULL);
-        g_hEditIconDark = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"", WS_CHILD | ES_AUTOHSCROLL, inputX, y, fieldW - 40, 25, g_hPageContent, NULL, hInst, NULL);
-        g_hBtnBrowseIconDark = CreateWindowW(L"BUTTON", L"...", WS_CHILD, inputX + fieldW - 35, y, 35, 25, g_hPageContent, (HMENU)107, hInst, NULL);
-        y += 28;
-        g_hChkFile = CreateWindowW(L"BUTTON", L"File", WS_CHILD | BS_AUTOCHECKBOX, inputX, y, 55, 25, g_hPageContent, NULL, hInst, NULL);
-        g_hChkDir = CreateWindowW(L"BUTTON", L"Directory", WS_CHILD | BS_AUTOCHECKBOX, inputX + 65, y, 85, 25, g_hPageContent, NULL, hInst, NULL);
-        g_hChkBG = CreateWindowW(L"BUTTON", L"Background", WS_CHILD | BS_AUTOCHECKBOX, inputX + 155, y, 95, 25, g_hPageContent, NULL, hInst, NULL);
-        y += 22;
-        g_hChkAdmin = CreateWindowW(L"BUTTON", L"Run as administrator", WS_CHILD | BS_AUTOCHECKBOX, inputX, y, 200, 25, g_hPageContent, NULL, hInst, NULL);
-        y += 28;
-
-        CreateWindowW(L"STATIC", L"File Types (only for 'File' target):", WS_CHILD, labelX, y, 280, 20, g_hPageContent, NULL, hInst, NULL);
-        y += 22;
-        int colW = 110;
-        int catX[3] = { inputX - 75, inputX + 45, inputX + 165 }; // Adjusting to start further left to use space better
+        CreateWindowW(L"STATIC", L"File Types (only for 'File' target):", WS_CHILD, 0, 0, 0, 0, g_hPageContent, NULL, hInst, NULL);
         auto categories = FileTypeHelper::GetAllCategories();
         for (size_t i = 0; i < categories.size(); i++) {
-            int cx = catX[i % 3];
             std::wstring catName = FileTypeHelper::GetCategoryName(categories[i]);
-            HWND hChk = CreateWindowW(L"BUTTON", catName.c_str(), WS_CHILD | BS_AUTOCHECKBOX, cx, y, colW, 22, g_hPageContent, NULL, hInst, NULL);
+            HWND hChk = CreateWindowW(L"BUTTON", catName.c_str(), WS_CHILD | BS_AUTOCHECKBOX, 0, 0, 0, 0, g_hPageContent, NULL, hInst, NULL);
             g_hFileTypeChecks[categories[i]] = hChk;
-            if (i % 3 == 2 || i == categories.size() - 1) y += 22;
         }
 
-        y += 10;
-        int btnW = 100;
-        g_hBtnAdd = CreateWindowW(L"BUTTON", L"Add", WS_CHILD, 25, y, btnW, 30, g_hPageContent, (HMENU)100, hInst, NULL);
-        g_hBtnEdit = CreateWindowW(L"BUTTON", L"Edit", WS_CHILD, 137, y, btnW, 30, g_hPageContent, (HMENU)103, hInst, NULL);
-        g_hBtnDel = CreateWindowW(L"BUTTON", L"Delete", WS_CHILD, 249, y, btnW, 30, g_hPageContent, (HMENU)101, hInst, NULL);
-
-        y += 35;
-        int longBtnW = 155;
-        g_hBtnBackup = CreateWindowW(L"BUTTON", L"Backup Settings...", WS_CHILD, 25, y, longBtnW, 30, g_hPageContent, (HMENU)105, hInst, NULL);
-        g_hBtnRestore = CreateWindowW(L"BUTTON", L"Restore Settings...", WS_CHILD, 194, y, longBtnW, 30, g_hPageContent, (HMENU)106, hInst, NULL);
+        g_hBtnAdd = CreateWindowW(L"BUTTON", L"Add", WS_CHILD, 0, 0, 0, 0, g_hPageContent, (HMENU)100, hInst, NULL);
+        g_hBtnEdit = CreateWindowW(L"BUTTON", L"Edit", WS_CHILD, 0, 0, 0, 0, g_hPageContent, (HMENU)103, hInst, NULL);
+        g_hBtnDel = CreateWindowW(L"BUTTON", L"Delete", WS_CHILD, 0, 0, 0, 0, g_hPageContent, (HMENU)101, hInst, NULL);
+        g_hBtnBackup = CreateWindowW(L"BUTTON", L"Backup Settings...", WS_CHILD, 0, 0, 0, 0, g_hPageContent, (HMENU)105, hInst, NULL);
+        g_hBtnRestore = CreateWindowW(L"BUTTON", L"Restore Settings...", WS_CHILD, 0, 0, 0, 0, g_hPageContent, (HMENU)106, hInst, NULL);
 
         EnumChildWindows(hwnd, [](HWND hChild, LPARAM lp) -> BOOL {
             SendMessage(hChild, WM_SETFONT, (WPARAM)g_hFont, TRUE);
-            // Forward mouse wheel for all children to the viewport for consistent scrolling
-            if (hChild != g_hViewport && hChild != g_hPageContent) {
+            if (hChild != g_hSidebar && hChild != g_hPageContent) {
                 SetWindowSubclass(hChild, ForwardMouseWheelProc, 1, 0);
             }
             return TRUE;
         }, 0);
         LoadCustomCommands();
-        UpdateTabVisibility();
+        UpdateSidebarVisibility();
         return 0;
     }
     case WM_COMMAND: {
         int wmId = LOWORD(wParam);
+        if (wmId == 500 && HIWORD(wParam) == LBN_SELCHANGE) { UpdateSidebarVisibility(); InvalidateRect(hwnd, NULL, TRUE); return 0; }
         if (wmId == 200 && HIWORD(wParam) == CBN_SELCHANGE) { SelectCustomCommand(); return 0; }
         if (HIWORD(wParam) == BN_CLICKED) {
             if (wmId == 100 || wmId == 103) { // Add or Edit
@@ -647,23 +618,30 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 }
             } else {
                 bool checked = SendMessage((HWND)lParam, BM_GETCHECK, 0, 0) == BST_CHECKED;
-                int currentTab = TabCtrl_GetCurSel(g_hTab);
+                int currentTab = (int)SendMessage(g_hSidebar, LB_GETCURSEL, 0, 0);
                 auto UpdateGroup = [&](std::vector<SettingItem>& group) {
                     for (auto& item : group) {
-                        if (item.hWnd == (HWND)lParam) {
+                        bool isNew = (item.hWndNew == (HWND)lParam);
+                        bool isOld = (item.hWndOld == (HWND)lParam);
+                        if (isNew || isOld) {
                             if (item.isCustom) {
                                 HKEY hSubKey;
                                 std::wstring subPath = std::wstring(REG_CUSTOM) + L"\\" + item.regValue;
                                 if (RegOpenKeyExW(HKEY_CURRENT_USER, subPath.c_str(), 0, KEY_SET_VALUE, &hSubKey) == ERROR_SUCCESS) {
                                     DWORD val = checked ? 1 : 0;
-                                    const wchar_t* valName = L"Enabled_Files";
-                                    if (currentTab == 1) valName = L"Enabled_Directory";
+                                    std::wstring valName;
+                                    if (currentTab == 0) valName = L"Enabled_Files";
+                                    else if (currentTab == 1) valName = L"Enabled_Directory";
                                     else if (currentTab == 2) valName = L"Enabled_Background";
-                                    RegSetValueExW(hSubKey, valName, 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
+
+                                    if (isOld) valName += L"_Old";
+                                    RegSetValueExW(hSubKey, valName.c_str(), 0, REG_DWORD, (BYTE*)&val, sizeof(DWORD));
                                     RegCloseKey(hSubKey);
                                 }
                             } else {
-                                SetSetting(item.regValue.c_str(), checked);
+                                std::wstring regVal = item.regValue;
+                                if (isOld) regVal += L"_Old";
+                                SetSetting(regVal.c_str(), checked);
                             }
                             break;
                         }
@@ -690,31 +668,35 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     case WM_DRAWITEM:
     {
         LPDRAWITEMSTRUCT lpDrawItem = (LPDRAWITEMSTRUCT)lParam;
-        if (lpDrawItem->hwndItem == g_hTab)
+        if (lpDrawItem->hwndItem == g_hSidebar)
         {
             WCHAR szText[256];
-            TCITEMW tci = { TCIF_TEXT };
-            tci.pszText = szText;
-            tci.cchTextMax = 256;
-            TabCtrl_GetItem(g_hTab, lpDrawItem->itemID, &tci);
+            SendMessage(g_hSidebar, LB_GETTEXT, lpDrawItem->itemID, (LPARAM)szText);
 
             HDC hdc = lpDrawItem->hDC;
             RECT rc = lpDrawItem->rcItem;
 
             bool isDarkMode = DarkModeManager::IsDarkMode();
-            HBRUSH hbr = isDarkMode ? DarkModeManager::GetBackgroundBrush() : GetSysColorBrush(COLOR_BTNFACE);
+            bool isSelected = (lpDrawItem->itemState & ODS_SELECTED);
+
+            HBRUSH hbr = isDarkMode ? DarkModeManager::GetBackgroundBrush() : GetSysColorBrush(COLOR_WINDOW);
+            if (isSelected) hbr = CreateSolidBrush(isDarkMode ? RGB(45, 45, 45) : GetSysColor(COLOR_HIGHLIGHT));
+
             FillRect(hdc, &rc, hbr);
+            if (isSelected && !isDarkMode) DeleteObject(hbr);
 
-            SetTextColor(hdc, isDarkMode ? DarkModeManager::GetTextColor() : GetSysColor(COLOR_BTNTEXT));
+            SetTextColor(hdc, isDarkMode ? DarkModeManager::GetTextColor() : (isSelected ? GetSysColor(COLOR_HIGHLIGHTTEXT) : GetSysColor(COLOR_WINDOWTEXT)));
             SetBkMode(hdc, TRANSPARENT);
-            DrawTextW(hdc, szText, -1, &rc, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
-            if (lpDrawItem->itemState & ODS_SELECTED)
+            RECT textRc = rc;
+            textRc.left += 10;
+            DrawTextW(hdc, szText, -1, &textRc, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+
+            if (isSelected)
             {
-                // Draw a simple underline or highlight for selected tab
                 RECT rcHighlight = rc;
-                rcHighlight.top = rcHighlight.bottom - 3;
-                HBRUSH hbrSel = CreateSolidBrush(isDarkMode ? RGB(0, 120, 215) : GetSysColor(COLOR_HIGHLIGHT));
+                rcHighlight.right = rcHighlight.left + 4;
+                HBRUSH hbrSel = CreateSolidBrush(RGB(0, 120, 215));
                 FillRect(hdc, &rcHighlight, hbrSel);
                 DeleteObject(hbrSel);
             }
@@ -723,8 +705,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         break;
     }
     case WM_NOTIFY: {
-        LPNMHDR nmhdr = (LPNMHDR)lParam;
-        if (nmhdr->code == TCN_SELCHANGE) { UpdateTabVisibility(); InvalidateRect(hwnd, NULL, TRUE); }
         return 0;
     }
     case WM_SETTINGCHANGE:
@@ -788,7 +768,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     HICON hIcon = (HICON)LoadImage(hInstance, MAKEINTRESOURCE(IDI_ICON1), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
     WNDCLASSEXW wc = { sizeof(WNDCLASSEX), CS_HREDRAW | CS_VREDRAW, WindowProc, 0, 0, hInstance, hIcon, LoadCursor(NULL, IDC_ARROW), NULL, NULL, CLASS_NAME, hIcon };
     RegisterClassExW(&wc);
-    HWND hwnd = CreateWindowExW(0, CLASS_NAME, L"xToolsMenu Settings", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, CW_USEDEFAULT, CW_USEDEFAULT, 420, 490, NULL, NULL, hInstance, NULL);
+    HWND hwnd = CreateWindowExW(0, CLASS_NAME, L"xToolsMenu Settings", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, CW_USEDEFAULT, CW_USEDEFAULT, 850, 600, NULL, NULL, hInstance, NULL);
     if (!hwnd) return 0;
     RECT rect; GetWindowRect(hwnd, &rect);
     SetWindowPos(hwnd, NULL, (GetSystemMetrics(SM_CXSCREEN) - (rect.right - rect.left)) / 2, (GetSystemMetrics(SM_CYSCREEN) - (rect.bottom - rect.top)) / 2, 0, 0, SWP_NOSIZE | SWP_NOZORDER);
