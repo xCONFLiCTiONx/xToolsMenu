@@ -81,6 +81,44 @@ static HBITMAP CreateMenuBitmapFromIcon(PCWSTR pszIconPath)
     if (FAILED(ResolveRelativeIconPath(pszIconPath, &pszFull))) return NULL;
 
     HICON hIcon = (HICON)LoadImageW(NULL, pszFull, IMAGE_ICON, 16, 16, LR_LOADFROMFILE);
+
+    if (!hIcon)
+    {
+        std::wstring cleanPath = pszFull;
+        int iconIndex = 0;
+        size_t commaPos = cleanPath.find_last_of(L',');
+        if (commaPos != std::wstring::npos)
+        {
+            std::wstring indexStr = cleanPath.substr(commaPos + 1);
+            bool isIndex = !indexStr.empty();
+            for (size_t i = 0; i < indexStr.size(); ++i)
+            {
+                if (i == 0 && indexStr[i] == L'-') continue;
+                if (!iswdigit(indexStr[i]))
+                {
+                    isIndex = false;
+                    break;
+                }
+            }
+            if (isIndex)
+            {
+                iconIndex = _wtoi(indexStr.c_str());
+                cleanPath = cleanPath.substr(0, commaPos);
+            }
+        }
+
+        if (cleanPath.size() >= 2 && cleanPath.front() == L'"' && cleanPath.back() == L'"')
+        {
+            cleanPath = cleanPath.substr(1, cleanPath.size() - 2);
+        }
+
+        HICON hSmallIcon = NULL;
+        if (ExtractIconExW(cleanPath.c_str(), iconIndex, NULL, &hSmallIcon, 1) > 0 && hSmallIcon)
+        {
+            hIcon = hSmallIcon;
+        }
+    }
+
     CoTaskMemFree(pszFull);
 
     if (!hIcon) return NULL;
@@ -89,9 +127,16 @@ static HBITMAP CreateMenuBitmapFromIcon(PCWSTR pszIconPath)
     ICONINFO iconInfo;
     if (GetIconInfo(hIcon, &iconInfo))
     {
-        hBitmap = (HBITMAP)CopyImage(iconInfo.hbmColor, IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION);
-        DeleteObject(iconInfo.hbmColor);
-        DeleteObject(iconInfo.hbmMask);
+        if (iconInfo.hbmColor)
+        {
+            hBitmap = (HBITMAP)CopyImage(iconInfo.hbmColor, IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION);
+        }
+        else if (iconInfo.hbmMask)
+        {
+            hBitmap = (HBITMAP)CopyImage(iconInfo.hbmMask, IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION);
+        }
+        if (iconInfo.hbmColor) DeleteObject(iconInfo.hbmColor);
+        if (iconInfo.hbmMask) DeleteObject(iconInfo.hbmMask);
     }
     DestroyIcon(hIcon);
     return hBitmap;
