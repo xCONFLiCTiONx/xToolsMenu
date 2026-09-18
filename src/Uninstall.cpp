@@ -1,4 +1,5 @@
 #include <windows.h>
+#include <shellapi.h>
 #include <iostream>
 #include <string>
 #include <filesystem>
@@ -15,6 +16,18 @@ bool IsAdmin() {
         FreeSid(adminGroup);
     }
     return isAdmin == TRUE;
+}
+
+bool ElevateSelf() {
+    wchar_t szPath[MAX_PATH];
+    if (GetModuleFileNameW(NULL, szPath, ARRAYSIZE(szPath)) == 0) return false;
+
+    SHELLEXECUTEINFOW sei = { sizeof(sei) };
+    sei.lpVerb = L"runas"; // Triggers UAC prompt
+    sei.lpFile = szPath;   // Restarts current executable
+    sei.nShow = SW_NORMAL;
+
+    return ShellExecuteExW(&sei);
 }
 
 bool DeleteRegistryKeyTree(HKEY hKeyParent, const std::wstring& subKey) {
@@ -43,6 +56,7 @@ bool RunCommand(const std::wstring& cmd) {
 
 int main() {
     if (!IsAdmin()) {
+        if (ElevateSelf()) return 0;
         std::wcerr << L"Error: This uninstaller must be run as Administrator." << std::endl;
         return 1;
     }

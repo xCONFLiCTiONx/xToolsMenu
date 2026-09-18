@@ -1,4 +1,5 @@
 #include <windows.h>
+#include <shellapi.h>
 #include <dwmapi.h>
 #include <shobjidl.h>
 #include <commctrl.h>
@@ -19,6 +20,7 @@
 HWND g_hSidebar = nullptr;
 HWND g_hPageContent = nullptr;
 HFONT g_hFont = nullptr;
+HFONT g_hSidebarFont = nullptr;
 HWND g_hHeaderCommand = nullptr, g_hHeaderNew = nullptr, g_hHeaderOld = nullptr;
 
 const wchar_t* REG_PATH = L"Software\\xToolsMenu\\Settings";
@@ -87,6 +89,41 @@ void SetSetting(const wchar_t* name, bool enabled) {
 
 LRESULT CALLBACK ForwardMouseWheelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
     return DefSubclassProc(hwnd, uMsg, wParam, lParam);
+}
+
+bool ElevateSelf() {
+    wchar_t szPath[MAX_PATH];
+    if (GetModuleFileNameW(NULL, szPath, ARRAYSIZE(szPath)) == 0) return false;
+
+    SHELLEXECUTEINFOW sei = { sizeof(sei) };
+    sei.lpVerb = L"runas"; // Triggers UAC prompt
+    sei.lpFile = szPath;   // Restarts current executable
+    sei.nShow = SW_NORMAL;
+
+    return ShellExecuteExW(&sei);
+}
+
+LRESULT CALLBACK SidebarSubclassProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
+    switch (uMsg) {
+    case WM_NCPAINT: {
+        HDC hdc = GetWindowDC(hWnd);
+        if (hdc) {
+            RECT rc;
+            GetWindowRect(hWnd, &rc);
+            OffsetRect(&rc, -rc.left, -rc.top);
+            // Gray border for the sidebar
+            HBRUSH hbr = CreateSolidBrush(DarkModeManager::IsDarkMode() ? RGB(80, 80, 80) : RGB(160, 160, 160));
+            FrameRect(hdc, &rc, hbr);
+            DeleteObject(hbr);
+            ReleaseDC(hWnd, hdc);
+        }
+        return 0;
+    }
+    case WM_NCDESTROY:
+        RemoveWindowSubclass(hWnd, SidebarSubclassProc, uIdSubclass);
+        break;
+    }
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
 }
 
 LRESULT CALLBACK PageContentProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam, UINT_PTR uIdSubclass, DWORD_PTR dwRefData) {
@@ -304,15 +341,8 @@ void UpdateSidebarVisibility() {
         SetWindowPos(g_hStaticIconDark, NULL, leftX, y + 3, 100, 20, SWP_NOZORDER | SWP_SHOWWINDOW);
         SetWindowPos(g_hEditIconDark, NULL, leftX + 110, y, 165, 25, SWP_NOZORDER | SWP_SHOWWINDOW);
         SetWindowPos(g_hBtnBrowseIconDark, NULL, leftX + 275, y, 35, 25, SWP_NOZORDER | SWP_SHOWWINDOW);
-        y += 40;
 
-        SetWindowPos(g_hChkFile, NULL, leftX, y, 60, 25, SWP_NOZORDER | SWP_SHOWWINDOW);
-        SetWindowPos(g_hChkDir, NULL, leftX + 70, y, 90, 25, SWP_NOZORDER | SWP_SHOWWINDOW);
-        SetWindowPos(g_hChkBG, NULL, leftX + 170, y, 100, 25, SWP_NOZORDER | SWP_SHOWWINDOW);
-        y += 30;
-        SetWindowPos(g_hChkAdmin, NULL, leftX, y, 200, 25, SWP_NOZORDER | SWP_SHOWWINDOW);
-
-        // Right side: File types and Buttons
+        // Right side: File types
         y = 20;
         HWND hStaticTypes = FindWindowExW(g_hPageContent, NULL, L"STATIC", L"File Types (only for 'File' target):");
         SetWindowPos(hStaticTypes, NULL, rightX, y, 280, 20, SWP_NOZORDER | SWP_SHOWWINDOW);
@@ -325,12 +355,20 @@ void UpdateSidebarVisibility() {
         }
         y += 130;
 
-        SetWindowPos(g_hBtnAdd, NULL, rightX, y, 90, 30, SWP_NOZORDER | SWP_SHOWWINDOW);
-        SetWindowPos(g_hBtnEdit, NULL, rightX + 95, y, 90, 30, SWP_NOZORDER | SWP_SHOWWINDOW);
-        SetWindowPos(g_hBtnDel, NULL, rightX + 190, y, 90, 30, SWP_NOZORDER | SWP_SHOWWINDOW);
-        y += 40;
-        SetWindowPos(g_hBtnBackup, NULL, rightX, y, 135, 30, SWP_NOZORDER | SWP_SHOWWINDOW);
-        SetWindowPos(g_hBtnRestore, NULL, rightX + 140, y, 135, 30, SWP_NOZORDER | SWP_SHOWWINDOW);
+        // Target checkboxes on the right below file types
+        SetWindowPos(g_hChkFile, NULL, rightX, y, 60, 25, SWP_NOZORDER | SWP_SHOWWINDOW);
+        SetWindowPos(g_hChkDir, NULL, rightX + 70, y, 90, 25, SWP_NOZORDER | SWP_SHOWWINDOW);
+        SetWindowPos(g_hChkBG, NULL, rightX + 170, y, 100, 25, SWP_NOZORDER | SWP_SHOWWINDOW);
+        y += 30;
+        SetWindowPos(g_hChkAdmin, NULL, rightX, y, 200, 25, SWP_NOZORDER | SWP_SHOWWINDOW);
+
+        // Buttons at the bottom
+        int btnY = 500;
+        SetWindowPos(g_hBtnAdd, NULL, leftX, btnY, 90, 30, SWP_NOZORDER | SWP_SHOWWINDOW);
+        SetWindowPos(g_hBtnEdit, NULL, leftX + 95, btnY, 90, 30, SWP_NOZORDER | SWP_SHOWWINDOW);
+        SetWindowPos(g_hBtnDel, NULL, leftX + 190, btnY, 90, 30, SWP_NOZORDER | SWP_SHOWWINDOW);
+        SetWindowPos(g_hBtnBackup, NULL, rightX, btnY, 135, 30, SWP_NOZORDER | SWP_SHOWWINDOW);
+        SetWindowPos(g_hBtnRestore, NULL, rightX + 140, btnY, 135, 30, SWP_NOZORDER | SWP_SHOWWINDOW);
 
         DarkModeManager::ApplyToControls(g_hPageContent);
     }
@@ -381,16 +419,20 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         HINSTANCE hInst = ((LPCREATESTRUCT)lParam)->hInstance;
         HDC hdc = GetDC(hwnd);
         int logHeight = -MulDiv(9, GetDeviceCaps(hdc, LOGPIXELSY), 72);
+        int logHeightSidebar = -MulDiv(13, GetDeviceCaps(hdc, LOGPIXELSY), 72);
         ReleaseDC(hwnd, hdc);
         g_hFont = CreateFontW(logHeight, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+        g_hSidebarFont = CreateFontW(logHeightSidebar, 0, 0, 0, FW_SEMIBOLD, FALSE, FALSE, FALSE, ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
 
-        g_hSidebar = CreateWindowExW(WS_EX_CLIENTEDGE, L"LISTBOX", L"", WS_CHILD | WS_VISIBLE | LBS_NOTIFY | LBS_OWNERDRAWFIXED | LBS_HASSTRINGS, 10, 10, 180, 540, hwnd, (HMENU)500, hInst, NULL);
+        g_hSidebar = CreateWindowExW(0, L"LISTBOX", L"", WS_CHILD | WS_VISIBLE | WS_BORDER | LBS_NOTIFY | LBS_OWNERDRAWFIXED | LBS_HASSTRINGS, 10, 10, 180, 540, hwnd, (HMENU)500, hInst, NULL);
+        SetWindowSubclass(g_hSidebar, SidebarSubclassProc, 0, 0);
         SendMessage(g_hSidebar, LB_ADDSTRING, 0, (LPARAM)L"Files");
         SendMessage(g_hSidebar, LB_ADDSTRING, 0, (LPARAM)L"Directory");
         SendMessage(g_hSidebar, LB_ADDSTRING, 0, (LPARAM)L"Background");
         SendMessage(g_hSidebar, LB_ADDSTRING, 0, (LPARAM)L"Custom");
+        SendMessage(g_hSidebar, LB_SETITEMHEIGHT, 0, 40);
         SendMessage(g_hSidebar, LB_SETCURSEL, 0, 0);
-        SendMessage(g_hSidebar, WM_SETFONT, (WPARAM)g_hFont, TRUE);
+        SendMessage(g_hSidebar, WM_SETFONT, (WPARAM)g_hSidebarFont, TRUE);
 
         g_hPageContent = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE, 200, 10, 630, 540, hwnd, NULL, hInst, NULL);
         SetWindowSubclass(g_hPageContent, PageContentProc, 0, 0);
@@ -587,7 +629,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                             WaitForSingleObject(sei.hProcess, INFINITE);
                             CloseHandle(sei.hProcess);
                         }
-                        MessageBoxW(hwnd, L"Settings exported successfully!", L"Backup", MB_OK | MB_ICONINFORMATION);
                     } else {
                         MessageBoxW(hwnd, L"Failed to export settings.", L"Error", MB_OK | MB_ICONERROR);
                     }
@@ -611,7 +652,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                             CloseHandle(sei.hProcess);
                         }
                         LoadCustomCommands();
-                        MessageBoxW(hwnd, L"Settings imported successfully! Please reopen Settings to see all checkboxes update.", L"Restore", MB_OK | MB_ICONINFORMATION);
                     } else {
                         MessageBoxW(hwnd, L"Failed to import settings.", L"Error", MB_OK | MB_ICONERROR);
                     }
@@ -687,9 +727,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
             SetTextColor(hdc, isDarkMode ? DarkModeManager::GetTextColor() : (isSelected ? GetSysColor(COLOR_HIGHLIGHTTEXT) : GetSysColor(COLOR_WINDOWTEXT)));
             SetBkMode(hdc, TRANSPARENT);
+            SelectObject(hdc, g_hSidebarFont);
 
             RECT textRc = rc;
-            textRc.left += 10;
+            textRc.left += 15;
             DrawTextW(hdc, szText, -1, &textRc, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
             if (isSelected)
@@ -743,6 +784,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     case WM_DESTROY:
         DarkModeManager::Cleanup();
         if (g_hFont) DeleteObject(g_hFont);
+        if (g_hSidebarFont) DeleteObject(g_hSidebarFont);
         PostQuitMessage(0);
         return 0;
     }

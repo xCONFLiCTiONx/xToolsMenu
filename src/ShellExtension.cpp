@@ -124,20 +124,54 @@ static HBITMAP CreateMenuBitmapFromIcon(PCWSTR pszIconPath)
     if (!hIcon) return NULL;
 
     HBITMAP hBitmap = NULL;
-    ICONINFO iconInfo;
-    if (GetIconInfo(hIcon, &iconInfo))
+    int cx = GetSystemMetrics(SM_CXSMICON);
+    int cy = GetSystemMetrics(SM_CYSMICON);
+    if (cx == 0) cx = 16;
+    if (cy == 0) cy = 16;
+
+    HDC hdcScreen = GetDC(NULL);
+    HDC hdcMem = CreateCompatibleDC(hdcScreen);
+    if (hdcMem)
     {
-        if (iconInfo.hbmColor)
+        BITMAPINFO bmi = { 0 };
+        bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        bmi.bmiHeader.biWidth = cx;
+        bmi.bmiHeader.biHeight = cy;
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
+
+        void* pBits = nullptr;
+        hBitmap = CreateDIBSection(hdcMem, &bmi, DIB_RGB_COLORS, &pBits, NULL, 0);
+        if (hBitmap && pBits)
         {
-            hBitmap = (HBITMAP)CopyImage(iconInfo.hbmColor, IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION);
+            HGDIOBJ hOldBmp = SelectObject(hdcMem, hBitmap);
+
+            RECT rect = { 0, 0, cx, cy };
+            HBRUSH hBrush = CreateSolidBrush(RGB(0, 0, 0));
+            FillRect(hdcMem, &rect, hBrush);
+            DeleteObject(hBrush);
+
+            DrawIconEx(hdcMem, 0, 0, hIcon, cx, cy, 0, NULL, DI_NORMAL);
+
+            unsigned char* pPixel = (unsigned char*)pBits;
+            for (int i = 0; i < cx * cy; i++)
+            {
+                if (pPixel[3] == 0)
+                {
+                    pPixel[0] = 0;
+                    pPixel[1] = 0;
+                    pPixel[2] = 0;
+                }
+                pPixel += 4;
+            }
+
+            SelectObject(hdcMem, hOldBmp);
         }
-        else if (iconInfo.hbmMask)
-        {
-            hBitmap = (HBITMAP)CopyImage(iconInfo.hbmMask, IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION);
-        }
-        if (iconInfo.hbmColor) DeleteObject(iconInfo.hbmColor);
-        if (iconInfo.hbmMask) DeleteObject(iconInfo.hbmMask);
+        DeleteDC(hdcMem);
     }
+    ReleaseDC(NULL, hdcScreen);
+
     DestroyIcon(hIcon);
     return hBitmap;
 }
