@@ -151,7 +151,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="..\src\SettingsDialog.cpp" />
+    <ClCompile Include="..\src\settings.cpp" />
     <ClCompile Include="..\src\DarkMode.cpp" />
     <ClCompile Include="..\src\FileTypeHelper.cpp" />
   </ItemGroup>

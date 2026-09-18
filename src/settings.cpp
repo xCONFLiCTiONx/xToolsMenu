@@ -796,7 +796,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     HANDLE hMutex = CreateMutexW(NULL, TRUE, L"Local\\xToolsMenuSettingsSingleInstanceMutex");
     if (hMutex == NULL || GetLastError() == ERROR_ALREADY_EXISTS) {
         if (hMutex) CloseHandle(hMutex);
-        HWND hwndExisting = FindWindowW(L"SettingsDialogClass", L"xToolsMenu Settings");
+        HWND hwndExisting = FindWindowW(L"SettingsClass", L"xToolsMenu Settings");
         if (hwndExisting) {
             ShowWindow(hwndExisting, SW_RESTORE);
             SetForegroundWindow(hwndExisting);
@@ -806,7 +806,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
 
     SetCurrentProcessExplicitAppUserModelID(L"xToolsMenu.Settings");
     INITCOMMONCONTROLSEX icex = { sizeof(icex), ICC_TAB_CLASSES }; InitCommonControlsEx(&icex);
-    const wchar_t CLASS_NAME[] = L"SettingsDialogClass";
+    const wchar_t CLASS_NAME[] = L"SettingsClass";
     HICON hIcon = (HICON)LoadImage(hInstance, MAKEINTRESOURCE(IDI_ICON1), IMAGE_ICON, 0, 0, LR_DEFAULTSIZE | LR_SHARED);
     WNDCLASSEXW wc = { sizeof(WNDCLASSEX), CS_HREDRAW | CS_VREDRAW, WindowProc, 0, 0, hInstance, hIcon, LoadCursor(NULL, IDC_ARROW), NULL, NULL, CLASS_NAME, hIcon };
     RegisterClassExW(&wc);

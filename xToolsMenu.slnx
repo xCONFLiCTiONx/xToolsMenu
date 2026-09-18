@@ -19,7 +19,7 @@
     <File Path="src/ShellExtension.h" />
     <File Path="src/manifest.xml" />
     <File Path="src/resource.h" />
-    <File Path="src/SettingsDialog.cpp" />
+    <File Path="src/settings.cpp" />
     <File Path="src/SystemFoldersDialog.cpp" />
     <File Path="src/TakeOwnershipDialog.cpp" />
     <File Path="src/Uninstall.cpp" />
