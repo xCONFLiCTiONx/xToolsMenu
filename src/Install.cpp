@@ -70,9 +70,8 @@ int main() {
     fs::path registrationDir = baseDir;
     fs::path manifestPath = baseDir / "AppxManifest.xml";
 
-    if (fs::exists(baseDir / "AppPackage" / "AppxManifest.xml")) {
-        registrationDir = baseDir / "AppPackage";
-        manifestPath = registrationDir / "AppxManifest.xml";
+    if (!fs::exists(manifestPath) && fs::exists(baseDir / "AppPackage" / "AppxManifest.xml")) {
+        manifestPath = baseDir / "AppPackage" / "AppxManifest.xml";
     }
 
     if (!fs::exists(manifestPath)) {
@@ -100,6 +99,9 @@ int main() {
     std::wstring addPackageCmd = L"powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"Add-AppxPackage -Register -Path '" + manifestPath.wstring() + L"' -ExternalLocation '" + registrationDir.wstring() + L"'\"";
 
     if (RunCommand(addPackageCmd)) {
+        std::wcout << L"Restarting Explorer to apply updates..." << std::endl;
+        RunCommand(L"powershell.exe -NoProfile -Command \"Stop-Process -Name explorer -Force\"");
+
         std::wcout << L"Registration completed successfully!" << std::endl;
         return 0;
     } else {
