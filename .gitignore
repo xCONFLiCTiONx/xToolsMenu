@@ -442,3 +442,5 @@ Reinstall.bat
 unregister.bat
 create_cert.ps1
 Sign.bat
+ICON.ico
+ICON.png
