@@ -586,8 +586,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     WCHAR iconPathLight[MAX_PATH], iconPathDark[MAX_PATH];
                     GetWindowTextW(g_hEditIconLight, iconPathLight, MAX_PATH);
                     GetWindowTextW(g_hEditIconDark, iconPathDark, MAX_PATH);
-                    if (wcslen(iconPathLight) == 0) SetWindowTextW(g_hEditIconLight, szFile);
-                    if (wcslen(iconPathDark) == 0) SetWindowTextW(g_hEditIconDark, szFile);
+                    if (wcslen(iconPathLight) == 0) {
+                        std::wstring iconWithIndex = std::wstring(szFile) + L",0";
+                        SetWindowTextW(g_hEditIconLight, iconWithIndex.c_str());
+                    }
+                    if (wcslen(iconPathDark) == 0) {
+                        std::wstring iconWithIndex = std::wstring(szFile) + L",0";
+                        SetWindowTextW(g_hEditIconDark, iconWithIndex.c_str());
+                    }
                 }
             } else if (wmId == 104 || wmId == 107) { // Browse Icon (Light or Dark)
                 HWND hTargetEdit = (wmId == 104) ? g_hEditIconLight : g_hEditIconDark;
