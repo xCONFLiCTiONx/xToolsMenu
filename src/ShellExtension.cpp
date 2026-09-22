@@ -330,9 +330,15 @@ bool IsCommandVisible(XToolsAction action, const std::wstring& customName, bool 
                 RegCloseKey(hKey);
 
                 if (enabled == 0) return false;
-                if (isBackground && !showBG) return false;
-                if (isFolder && !showDir) return false;
-                if (!isBackground && !isFolder)
+                if (isBackground)
+                {
+                    if (!showBG) return false;
+                }
+                else if (isFolder)
+                {
+                    if (!showDir) return false;
+                }
+                else
                 {
                     if (!showFile) return false;
                     for (const auto& path : selectedPaths)
@@ -392,10 +398,16 @@ bool IsCommandVisible(XToolsAction action, const std::wstring& customName, bool 
 
 IFACEMETHODIMP XToolsSubCommand::GetState(IShellItemArray* psiItemArray, BOOL, EXPCMDSTATE* pCmdState)
 {
+    DWORD count = 0;
+    if (psiItemArray) {
+        psiItemArray->GetCount(&count);
+    }
+    bool isBackground = (count == 0);
+
     std::vector<std::wstring> paths = GetTargetPaths(psiItemArray, _spUnkSite.Get());
-    bool isBackground = paths.empty();
     bool isFolder = false;
-    if (!paths.empty()) {
+
+    if (!isBackground && !paths.empty()) {
         DWORD attrs = GetFileAttributesW(paths[0].c_str());
         if (attrs != INVALID_FILE_ATTRIBUTES) isFolder = (attrs & FILE_ATTRIBUTE_DIRECTORY);
     }
@@ -596,13 +608,24 @@ static void ExecuteAction(XToolsAction action, const std::wstring& title, const 
 
         AllowSetForegroundWindow(ASFW_ANY);
 
+        WCHAR szWorkDir[MAX_PATH] = { 0 };
+        const wchar_t* lpDirectory = NULL;
+        if (!paths.empty()) {
+            wcscpy_s(szWorkDir, paths[0].c_str());
+            DWORD attrs = GetFileAttributesW(szWorkDir);
+            if (attrs != INVALID_FILE_ATTRIBUTES && !(attrs & FILE_ATTRIBUTE_DIRECTORY)) {
+                PathRemoveFileSpecW(szWorkDir);
+            }
+            if (wcslen(szWorkDir) > 0) lpDirectory = szWorkDir;
+        }
+
         if (baseArgs.find(L"%1") != std::wstring::npos)
         {
             for (const auto& path : paths)
             {
                 std::wstring args = baseArgs;
                 ReplaceAll(args, L"%1", path);
-                ShellExecuteW(hwnd, runAsAdmin ? L"runas" : L"open", targetExe.c_str(), args.c_str(), NULL, SW_SHOWNORMAL);
+                ShellExecuteW(hwnd, runAsAdmin ? L"runas" : L"open", targetExe.c_str(), args.c_str(), lpDirectory, SW_SHOWNORMAL);
             }
         }
         else
@@ -615,7 +638,7 @@ static void ExecuteAction(XToolsAction action, const std::wstring& title, const 
                 if (!p.empty() && p.back() == L'\\') p += L'\\';
                 fullArgs += L"\""; fullArgs += p; fullArgs += L"\"";
             }
-            ShellExecuteW(hwnd, runAsAdmin ? L"runas" : L"open", targetExe.c_str(), fullArgs.empty() ? NULL : fullArgs.c_str(), NULL, SW_SHOWNORMAL);
+            ShellExecuteW(hwnd, runAsAdmin ? L"runas" : L"open", targetExe.c_str(), fullArgs.empty() ? NULL : fullArgs.c_str(), lpDirectory, SW_SHOWNORMAL);
         }
     }
     else if (action == XToolsAction::Terminal || action == XToolsAction::TerminalAdmin)
@@ -856,10 +879,11 @@ IFACEMETHODIMP XToolsClassicMenu::Initialize(PCIDLIST_ABSOLUTE pidlFolder, IData
         if (SHGetPathFromIDListW(pidlFolder, szPath))
         {
             _selectedPaths.push_back(szPath);
+            _isBackground = true;
         }
     }
 
-    if (!_selectedPaths.empty())
+    if (!_isBackground && !_selectedPaths.empty())
     {
         DWORD attrs = GetFileAttributesW(_selectedPaths[0].c_str());
         if (attrs != INVALID_FILE_ATTRIBUTES) _isFolder = (attrs & FILE_ATTRIBUTE_DIRECTORY);
