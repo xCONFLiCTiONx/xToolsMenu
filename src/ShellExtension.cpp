@@ -619,14 +619,24 @@ static void ExecuteAction(XToolsAction action, const std::wstring& title, const 
             if (wcslen(szWorkDir) > 0) lpDirectory = szWorkDir;
         }
 
-        if (baseArgs.find(L"%1") != std::wstring::npos)
+        bool hasPlaceholder = (baseArgs.find(L"%1") != std::wstring::npos ||
+                               baseArgs.find(L"%V") != std::wstring::npos ||
+                               baseArgs.find(L"%v") != std::wstring::npos);
+
+        if (hasPlaceholder)
         {
             for (const auto& path : paths)
             {
                 std::wstring args = baseArgs;
                 ReplaceAll(args, L"%1", path);
+                ReplaceAll(args, L"%V", path);
+                ReplaceAll(args, L"%v", path);
                 ShellExecuteW(hwnd, runAsAdmin ? L"runas" : L"open", targetExe.c_str(), args.c_str(), lpDirectory, SW_SHOWNORMAL);
             }
+        }
+        else if (action == XToolsAction::Custom)
+        {
+            ShellExecuteW(hwnd, runAsAdmin ? L"runas" : L"open", targetExe.c_str(), baseArgs.empty() ? NULL : baseArgs.c_str(), lpDirectory, SW_SHOWNORMAL);
         }
         else
         {
